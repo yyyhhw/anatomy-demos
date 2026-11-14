@@ -192,196 +192,572 @@ const lerp = (a, b, t) => a + (b - a) * t;
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
 // ============================================================
-//  程序化贴图
+//  程序化 PBR 贴图（颜色 / 法线 / 粗糙度，全部可平铺）
 // ============================================================
-function makeTex(draw, size = 256) {
-  const cv = document.createElement('canvas'); cv.width = cv.height = size;
-  const g = cv.getContext('2d'); draw(g, size);
-  const t = new THREE.CanvasTexture(cv);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
-  return t;
+function mkCanvas(w, h = w) { const c = document.createElement('canvas'); c.width = w; c.height = h; return [c, c.getContext('2d')]; }
+function noiseTile(cells) {
+  const [c, g] = mkCanvas(cells * 2); const img = g.createImageData(cells, cells);
+  for (let i = 0; i < img.data.length; i += 4) { const v = Math.random() * 255; img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255; }
+  g.putImageData(img, 0, 0); g.putImageData(img, cells, 0); g.putImageData(img, 0, cells); g.putImageData(img, cells, cells); return c;
 }
-function grain(g, s, base, amp, n) {
+// 多倍频平滑噪声（两级放大消除格子感，源图四联拼保证无缝）
+function fbm(g, w, h, { octaves = [6, 12, 24, 48], alpha = .5, blend = 'overlay', falloff = .6 } = {}) {
+  g.save(); g.globalCompositeOperation = blend; g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+  let a = alpha;
+  for (const cells of octaves) {
+    const t = noiseTile(cells); const [mid, mg] = mkCanvas(cells * 8); mg.imageSmoothingEnabled = true; mg.imageSmoothingQuality = 'high';
+    mg.drawImage(t, cells / 2, cells / 2, cells, cells, 0, 0, cells * 8, cells * 8);
+    g.globalAlpha = a; g.drawImage(mid, 0, 0, w, h); a *= falloff;
+  }
+  g.restore();
+}
+function speckle(g, w, h, n, lo, hi, size = 1.5, alpha = 1) {
+  g.save(); g.globalAlpha = alpha;
+  for (let i = 0; i < n; i++) { const v = (lo + Math.random() * (hi - lo)) | 0; g.fillStyle = `rgb(${v},${v},${v})`; const r = size * (.5 + Math.random()); g.fillRect(Math.random() * w, Math.random() * h, r, r); }
+  g.restore();
+}
+// 同一条裂缝路径画到多个画布（颜色 / 高度 / 粗糙度保持一致）
+function cracks(targets, w, h, n, seg = 14, step = 26) {
   for (let i = 0; i < n; i++) {
-    const v = Math.round(base + (Math.random() - .5) * amp);
-    g.fillStyle = `rgb(${v},${v},${v})`; g.fillRect(Math.random() * s, Math.random() * s, 1 + Math.random() * 2, 1 + Math.random() * 2);
+    const pts = []; let x = w * (.15 + Math.random() * .7), y = h * (.15 + Math.random() * .7), a = Math.random() * 6.28;
+    for (let k = 0; k < seg; k++) { pts.push([x, y]); a += (Math.random() - .5) * 1.5; x = clamp(x + Math.cos(a) * step * (.4 + Math.random()), 2, w - 2); y = clamp(y + Math.sin(a) * step * (.4 + Math.random()), 2, h - 2); }
+    for (const [g, color, width] of targets) {
+      g.strokeStyle = color; g.lineCap = 'round'; g.lineJoin = 'round'; g.lineWidth = width * (.7 + Math.random() * .6);
+      g.beginPath(); pts.forEach(([px, py], j) => j ? g.lineTo(px, py) : g.moveTo(px, py)); g.stroke();
+    }
   }
 }
-const TEX = {
-  asphalt: makeTex((g, s) => {
-    g.fillStyle = '#5c5d5b'; g.fillRect(0, 0, s, s); grain(g, s, 92, 70, 9000);
-    g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 1.2;
-    for (let i = 0; i < 5; i++) { g.beginPath(); let x = rnd(s), y = rnd(s); g.moveTo(x, y); for (let k = 0; k < 6; k++) { x += rnd(-40, 40); y += rnd(-40, 40); g.lineTo(x, y); } g.stroke(); }
-  }),
-  concrete: makeTex((g, s) => {
-    g.fillStyle = '#9a9890'; g.fillRect(0, 0, s, s); grain(g, s, 150, 50, 7000);
-    g.fillStyle = 'rgba(0,0,0,.22)'; g.fillRect(0, 0, s, 3); g.fillRect(0, 0, 3, s);
-    g.fillStyle = 'rgba(255,255,255,.12)'; g.fillRect(0, s - 2, s, 2);
-    for (let i = 0; i < 12; i++) { g.fillStyle = `rgba(0,0,0,${rnd(.05, .18)})`; g.fillRect(rnd(s), rnd(s), rnd(6, 30), rnd(6, 30)); }
-  }),
-  brick: makeTex((g, s) => {
-    g.fillStyle = '#6e6259'; g.fillRect(0, 0, s, s);
-    const bh = s / 8, bw = s / 4;
-    for (let r = 0; r < 8; r++) for (let c = -1; c < 5; c++) {
-      const off = (r % 2) * bw / 2; const v = rnd(-18, 18);
-      g.fillStyle = `rgb(${138 + v},${74 + v * .6},${58 + v * .5})`;
-      g.fillRect(c * bw + off + 2, r * bh + 2, bw - 4, bh - 4);
+function blob(g, x, y, r, color, jag = .35) {
+  g.fillStyle = color; g.beginPath();
+  for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2, rr = r * (1 - jag + Math.random() * jag * 2); const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr; i ? g.lineTo(px, py) : g.moveTo(px, py); }
+  g.closePath(); g.fill();
+}
+function radial(g, x, y, r, c0, c1) { const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, c0); gr.addColorStop(1, c1); g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2); }
+function weave(g, w, h, step, light, dark) {
+  for (let i = 0; i < w; i += step) { g.fillStyle = (i / step) % 2 ? light : dark; g.fillRect(i, 0, 1, h); }
+  for (let j = 0; j < h; j += step) { g.fillStyle = (j / step) % 2 ? light : dark; g.fillRect(0, j, w, 1); }
+}
+function normalFromHeight(hc, strength) {
+  const w = hc.width, h = hc.height, d = hc.getContext('2d').getImageData(0, 0, w, h).data;
+  const [c, g] = mkCanvas(w, h), out = g.createImageData(w, h), o = out.data;
+  const H = (x, y) => d[(((y + h) % h) * w + ((x + w) % w)) * 4] / 255;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const dx = (H(x + 1, y) - H(x - 1, y)) * strength, dy = (H(x, y + 1) - H(x, y - 1)) * strength;
+    const il = 1 / Math.hypot(dx, dy, 1), i = (y * w + x) * 4;
+    o[i] = (-dx * il * .5 + .5) * 255; o[i + 1] = (dy * il * .5 + .5) * 255; o[i + 2] = (il * .5 + .5) * 255; o[i + 3] = 255;
+  }
+  g.putImageData(out, 0, 0); return c;
+}
+const SETS = {}, TEX = {};
+function makeSet(name, w, h, tile, fn, { normalScale = 1, metalness = 0, strength = 2.5 } = {}) {
+  const [cc, c] = mkCanvas(w, h), [hc, hg] = mkCanvas(w, h), [rc, rg] = mkCanvas(w, h);
+  hg.fillStyle = '#808080'; hg.fillRect(0, 0, w, h); rg.fillStyle = '#f0f0f0'; rg.fillRect(0, 0, w, h);
+  fn(c, hg, rg, w, h);
+  const T = cv => { const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; return t; };
+  const map = T(cc); map.colorSpace = THREE.SRGBColorSpace;
+  SETS[name] = { map, normalMap: T(normalFromHeight(hc, strength)), roughnessMap: T(rc), normalScale, metalness, tile: Array.isArray(tile) ? tile : [tile, tile] };
+}
+const hsl = (h, s, l) => `hsl(${h},${s}%,${l}%)`;
+
+// —— 沥青（4m）——
+makeSet('asphalt', 512, 512, 4, (c, hg, rg, w, h) => {
+  c.fillStyle = '#353533'; c.fillRect(0, 0, w, h); fbm(c, w, h, { alpha: .3 });
+  speckle(c, w, h, 30000, 25, 120, 1.4, .85); speckle(hg, w, h, 14000, 95, 165, 1.4, .9);
+  for (let i = 0; i < 3; i++) { const v = 40 + rnd(40) | 0; c.fillStyle = `rgba(${v},${v},${v},.35)`; const x = rnd(w), y = rnd(h), pw = rnd(90, 200), ph = rnd(60, 160); c.fillRect(x, y, pw, ph); hg.fillStyle = 'rgba(140,140,140,.5)'; hg.fillRect(x, y, pw, ph); }
+  for (let i = 0; i < 4; i++) { const x = rnd(w), y = rnd(h), r = rnd(30, 90); radial(c, x, y, r, 'rgba(8,8,10,.75)', 'rgba(8,8,10,0)'); radial(rg, x, y, r, 'rgba(70,70,70,.9)', 'rgba(70,70,70,0)'); }
+  cracks([[c, 'rgba(12,12,12,.8)', 2.2], [hg, 'rgba(40,40,40,.9)', 2.6], [rg, 'rgba(255,255,255,.6)', 2.2]], w, h, 7);
+  fbm(rg, w, h, { alpha: .25, blend: 'source-over' });
+});
+// —— 混凝土（2m）——
+makeSet('concrete', 512, 512, 2, (c, hg, rg, w, h) => {
+  c.fillStyle = '#6e6c66'; c.fillRect(0, 0, w, h); fbm(c, w, h, { alpha: .22 }); fbm(c, w, h, { alpha: .3, blend: 'multiply', octaves: [4, 8] });
+  speckle(c, w, h, 9000, 70, 160, 1.2, .5); speckle(hg, w, h, 5000, 115, 145, 1.2, .8);
+  // 模板拼缝 + 对拉螺栓孔
+  for (const t of [[c, 'rgba(35,35,35,.75)', 5], [hg, '#454545', 5], [rg, '#ffffff', 5]]) { const [g, col, lw] = t; g.strokeStyle = col; g.lineWidth = lw; g.beginPath(); g.moveTo(0, h / 2); g.lineTo(w, h / 2); g.moveTo(w / 2, 0); g.lineTo(w / 2, h); g.moveTo(0, 1); g.lineTo(w, 1); g.moveTo(1, 0); g.lineTo(1, h); g.stroke(); }
+  for (const px of [0, w / 2]) for (const py of [0, h / 2]) for (const [ox, oy] of [[w / 8, h / 8], [3 * w / 8, h / 8], [w / 8, 3 * h / 8], [3 * w / 8, 3 * h / 8]]) {
+    const x = px + ox, y = py + oy; radial(c, x, y, 9, 'rgba(45,45,45,.9)', 'rgba(45,45,45,0)'); radial(hg, x, y, 8, '#3a3a3a', 'rgba(58,58,58,0)');
+    c.fillStyle = 'rgba(255,255,255,.12)'; c.beginPath(); c.arc(x, y + 2, 7, 0, 7); c.fill();
+    if (Math.random() < .5) { const gr = c.createLinearGradient(0, y, 0, y + rnd(40, 120)); gr.addColorStop(0, 'rgba(40,38,34,.45)'); gr.addColorStop(1, 'rgba(40,38,34,0)'); c.fillStyle = gr; c.fillRect(x - 5, y, 10, 120); }
+  }
+  for (let i = 0; i < 26; i++) { const x = rnd(w), y = rnd(h), r = rnd(3, 9); blob(c, x, y, r, 'rgba(60,60,58,.65)'); blob(hg, x, y, r, '#585858'); }
+  for (let i = 0; i < 5; i++) { const x = rnd(w), y = rnd(h), r = rnd(40, 110); radial(c, x, y, r, 'rgba(50,55,45,.28)', 'rgba(50,55,45,0)'); }
+  cracks([[c, 'rgba(40,40,40,.55)', 1.2], [hg, 'rgba(70,70,70,.8)', 1.6]], w, h, 3, 10, 20);
+  fbm(rg, w, h, { alpha: .3, blend: 'source-over' });
+}, { strength: 3 });
+// —— 砖墙（2m × 1m）——
+makeSet('brick', 512, 256, [2, 1], (c, hg, rg, w, h) => {
+  c.fillStyle = '#8a8276'; c.fillRect(0, 0, w, h); fbm(c, w, h, { alpha: .4 }); speckle(c, w, h, 6000, 90, 180, 1.2, .5);
+  hg.fillStyle = '#4a4a4a'; hg.fillRect(0, 0, w, h); rg.fillStyle = '#f6f6f6'; rg.fillRect(0, 0, w, h);
+  const rows = 12, cols = 8, bw = w / cols, bh = h / rows, m = 3;
+  for (let r = 0; r < rows; r++) {
+    const off = (r % 2) * bw / 2;
+    for (let col = -1; col <= cols; col++) {
+      const x = col * bw + off, y = r * bh;
+      const dark = Math.random() < .08;
+      c.fillStyle = dark ? hsl(20 + rnd(10), 8 + rnd(8), 26 + rnd(8)) : hsl(8 + rnd(14), 32 + rnd(24), 28 + rnd(20));
+      c.fillRect(x + m, y + m, bw - 2 * m, bh - 2 * m);
+      c.fillStyle = 'rgba(255,255,255,.1)'; c.fillRect(x + m, y + m, bw - 2 * m, 1.5); c.fillRect(x + m, y + m, 1.5, bh - 2 * m);
+      c.fillStyle = 'rgba(0,0,0,.28)'; c.fillRect(x + m, y + bh - m - 1.5, bw - 2 * m, 1.5); c.fillRect(x + bw - m - 1.5, y + m, 1.5, bh - 2 * m);
+      hg.fillStyle = `rgb(${165 + rnd(30) | 0},${165 + rnd(30) | 0},${165 + rnd(30) | 0})`; hg.fillRect(x + m, y + m, bw - 2 * m, bh - 2 * m);
+      hg.fillStyle = 'rgba(255,255,255,.18)'; hg.fillRect(x + m + 2, y + m + 2, bw - 2 * m - 4, bh - 2 * m - 4);
+      rg.fillStyle = `rgb(${200 + rnd(40) | 0},${200 + rnd(40) | 0},${200 + rnd(40) | 0})`; rg.fillRect(x + m, y + m, bw - 2 * m, bh - 2 * m);
+      if (Math.random() < .12) { const cx = x + m + rnd(bw - 2 * m), cy = y + m + rnd(bh - 2 * m), r = rnd(3, 7); blob(c, cx, cy, r, '#8a8276'); blob(hg, cx, cy, r, '#5a5a5a'); }
     }
-    grain(g, s, 110, 60, 2500);
-  }),
-  plank: makeTex((g, s) => {
-    g.fillStyle = '#7a5a36'; g.fillRect(0, 0, s, s);
-    for (let i = 0; i < 6; i++) {
-      const v = rnd(-16, 16); g.fillStyle = `rgb(${150 + v},${105 + v},${62 + v})`; g.fillRect(0, i * s / 6 + 1, s, s / 6 - 2);
-      g.strokeStyle = 'rgba(60,35,10,.5)'; g.lineWidth = 1;
-      for (let k = 0; k < 4; k++) { g.beginPath(); const y = i * s / 6 + rnd(4, s / 6 - 4); g.moveTo(0, y); g.bezierCurveTo(s * .3, y + rnd(-4, 4), s * .7, y + rnd(-4, 4), s, y); g.stroke(); }
+  }
+  speckle(c, w, h, 7000, 60, 200, 1, .35); speckle(hg, w, h, 5000, 110, 150, 1, .6);
+  for (let i = 0; i < 3; i++) radial(c, rnd(w), rnd(h), rnd(40, 90), 'rgba(235,230,220,.3)', 'rgba(235,230,220,0)');
+  fbm(c, w, h, { alpha: .3, blend: 'multiply', octaves: [4, 8, 16] });
+}, { strength: 2.2 });
+// —— 波纹铁皮（集装箱，2m）——
+function corrugated(name, paint, rust = 1) {
+  makeSet(name, 512, 512, 2, (c, hg, rg, w, h) => {
+    c.fillStyle = paint; c.fillRect(0, 0, w, h); fbm(c, w, h, { alpha: .35 }); rg.fillStyle = '#8c8c8c'; rg.fillRect(0, 0, w, h);
+    const ribs = 16, rw = w / ribs;
+    for (let i = 0; i < ribs; i++) {
+      const x = i * rw;
+      let gr = c.createLinearGradient(x, 0, x + rw, 0); gr.addColorStop(0, 'rgba(0,0,0,.3)'); gr.addColorStop(.3, 'rgba(255,255,255,.14)'); gr.addColorStop(.6, 'rgba(255,255,255,.02)'); gr.addColorStop(1, 'rgba(0,0,0,.3)'); c.fillStyle = gr; c.fillRect(x, 0, rw, h);
+      gr = hg.createLinearGradient(x, 0, x + rw, 0); gr.addColorStop(0, '#4a4a4a'); gr.addColorStop(.35, '#c8c8c8'); gr.addColorStop(.65, '#c8c8c8'); gr.addColorStop(1, '#4a4a4a'); hg.fillStyle = gr; hg.fillRect(x, 0, rw, h);
     }
-    g.fillStyle = 'rgba(0,0,0,.4)'; g.fillRect(0, 0, s, 4); g.fillRect(0, s - 4, s, 4); g.fillRect(0, 0, 4, s); g.fillRect(s - 4, 0, 4, s);
-    g.fillStyle = '#3a2a18'; [[14, 14], [s - 18, 14], [14, s - 18], [s - 18, s - 18]].forEach(([x, y]) => { g.beginPath(); g.arc(x + 2, y + 2, 3, 0, 7); g.fill(); });
-  }),
-  metal: makeTex((g, s) => {
-    g.fillStyle = '#3f5560'; g.fillRect(0, 0, s, s); grain(g, s, 80, 40, 4000);
-    for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? 'rgba(0,0,0,.25)' : 'rgba(255,255,255,.08)'; g.fillRect(i * s / 8, 0, 3, s); }
-    for (let i = 0; i < 25; i++) { g.fillStyle = `rgba(120,70,30,${rnd(.1, .5)})`; g.fillRect(rnd(s), rnd(s), rnd(3, 14), rnd(3, 30)); }
-  }),
-  sand: makeTex((g, s) => { g.fillStyle = '#9c8a62'; g.fillRect(0, 0, s, s); grain(g, s, 140, 50, 6000); g.fillStyle = 'rgba(0,0,0,.3)'; g.fillRect(0, s / 2 - 2, s, 4); }),
-  flash: (() => {
-    const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d');
+    for (const y of [12, h - 12]) for (let i = 0; i < ribs; i++) { const x = i * rw + rw / 2; radial(hg, x, y, 5, '#ffffff', 'rgba(255,255,255,0)'); c.fillStyle = 'rgba(0,0,0,.4)'; c.beginPath(); c.arc(x, y, 4.5, 0, 7); c.fill(); c.fillStyle = 'rgba(255,255,255,.25)'; c.beginPath(); c.arc(x - 1, y - 1, 2.5, 0, 7); c.fill(); }
+    for (let i = 0; i < 40 * rust; i++) {
+      const x = rnd(w), y = rnd(h * .7), len = rnd(40, 220), lw = rnd(2, 7);
+      const gr = c.createLinearGradient(0, y, 0, y + len); gr.addColorStop(0, 'rgba(120,60,22,.0)'); gr.addColorStop(.2, 'rgba(120,60,22,.55)'); gr.addColorStop(1, 'rgba(90,40,15,0)'); c.fillStyle = gr; c.fillRect(x, y, lw, len);
+      const gr2 = rg.createLinearGradient(0, y, 0, y + len); gr2.addColorStop(0, 'rgba(255,255,255,0)'); gr2.addColorStop(.2, 'rgba(255,255,255,.7)'); gr2.addColorStop(1, 'rgba(255,255,255,0)'); rg.fillStyle = gr2; rg.fillRect(x, y, lw, len);
+    }
+    for (let i = 0; i < 10 * rust; i++) { const x = rnd(w), y = rnd(h), r = rnd(10, 40); blob(c, x, y, r, `rgba(${100 + rnd(40) | 0},${45 + rnd(25) | 0},${18 + rnd(12) | 0},.75)`, .5); blob(rg, x, y, r, 'rgba(255,255,255,.8)', .5); blob(hg, x, y, r * .8, 'rgba(90,90,90,.5)', .5); }
+    for (let i = 0; i < 30; i++) { const x = rnd(w), y = rnd(h), a = rnd(6.28), l = rnd(15, 70); c.strokeStyle = 'rgba(210,210,205,.35)'; c.lineWidth = 1; c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); c.stroke(); rg.strokeStyle = 'rgba(60,60,60,.8)'; rg.beginPath(); rg.moveTo(x, y); rg.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); rg.stroke(); }
+    for (let i = 0; i < 4; i++) radial(hg, rnd(w), rnd(h), rnd(20, 50), 'rgba(70,70,70,.7)', 'rgba(70,70,70,0)');
+    const gr = c.createLinearGradient(0, h * .75, 0, h); gr.addColorStop(0, 'rgba(30,25,20,0)'); gr.addColorStop(1, 'rgba(30,25,20,.45)'); c.fillStyle = gr; c.fillRect(0, h * .75, w, h * .25);
+  }, { strength: 2.2, metalness: .6 });
+}
+corrugated('contRed', '#8a3a2a'); corrugated('contBlue', '#2d4f6b'); corrugated('contGreen', '#4a5b3a'); corrugated('contGrey', '#5f6468', .6); corrugated('contYellow', '#a67c2a', .8);
+// —— 弹药箱木板（1.2m 单面）——
+function crateSet(name, wi) { makeSet(name, 512, 512, 1.2, (c, hg, rg, w, h) => {
+  c.fillStyle = '#7d5c36'; c.fillRect(0, 0, w, h); rg.fillStyle = '#e4e4e4'; rg.fillRect(0, 0, w, h);
+  const planks = 5, ph = h / planks;
+  for (let i = 0; i < planks; i++) {
+    const y = i * ph; c.fillStyle = hsl(28 + rnd(8), 36 + rnd(14), 28 + rnd(14)); c.fillRect(0, y + 2, w, ph - 4);
+    hg.fillStyle = `rgb(${125 + rnd(20) | 0},${125 + rnd(20) | 0},${125 + rnd(20) | 0})`; hg.fillRect(0, y + 2, w, ph - 4);
+    hg.fillStyle = '#404040'; hg.fillRect(0, y, w, 3); c.fillStyle = '#2a1a0c'; c.fillRect(0, y, w, 3);
+    for (let k = 0; k < 22; k++) { const yy = y + 4 + rnd(ph - 8), amp = rnd(1, 4), f = rnd(.01, .03); c.strokeStyle = `rgba(40,22,8,${rnd(.15, .4)})`; c.lineWidth = rnd(.6, 1.6); c.beginPath(); for (let x = 0; x <= w; x += 8) { const yv = yy + Math.sin(x * f + k) * amp; x ? c.lineTo(x, yv) : c.moveTo(x, yv); } c.stroke(); }
+    if (Math.random() < .7) { const kx = rnd(60, w - 60), ky = y + ph / 2 + rnd(-10, 10); for (let r = 14; r > 2; r -= 3) { c.strokeStyle = `rgba(45,25,8,${.35 + (14 - r) * .04})`; c.lineWidth = 1.5; c.beginPath(); c.ellipse(kx, ky, r, r * .55, 0, 0, 7); c.stroke(); } radial(hg, kx, ky, 12, '#606060', 'rgba(96,96,96,0)'); }
+  }
+  // 边框木条 + 金属护角
+  c.fillStyle = 'rgba(0,0,0,.22)'; c.fillRect(0, 0, w, 22); c.fillRect(0, h - 22, w, 22); c.fillRect(0, 0, 22, h); c.fillRect(w - 22, 0, 22, h);
+  hg.fillStyle = '#a8a8a8'; hg.fillRect(0, 0, w, 22); hg.fillRect(0, h - 22, w, 22); hg.fillRect(0, 0, 22, h); hg.fillRect(w - 22, 0, 22, h);
+  for (const [x, y] of [[0, 0], [w - 44, 0], [0, h - 44], [w - 44, h - 44]]) { c.fillStyle = '#44474a'; c.fillRect(x, y, 44, 44); c.fillStyle = 'rgba(255,255,255,.12)'; c.fillRect(x + 2, y + 2, 40, 3); hg.fillStyle = '#b8b8b8'; hg.fillRect(x, y, 44, 44); rg.fillStyle = '#707070'; rg.fillRect(x, y, 44, 44); for (const [bx, by] of [[10, 10], [34, 10], [10, 34], [34, 34]]) { c.fillStyle = '#1e1f20'; c.beginPath(); c.arc(x + bx, y + by, 3, 0, 7); c.fill(); radial(hg, x + bx, y + by, 4, '#e0e0e0', 'rgba(224,224,224,0)'); } }
+  const words = [['AMMO 5.56MM', 'BALL M855 · 1600 RDS'], ['M67 FRAG', 'GRENADE HAND · 30 EA'], ['7.62 LINK', '4 BALL 1 TRACER'], ['SUPPLY', 'CLASS V · HANDLE W/ CARE']];
+  const [t1, t2] = words[wi];
+  c.save(); c.translate(w / 2, h / 2); c.rotate(rnd(-.03, .03)); c.textAlign = 'center'; c.fillStyle = 'rgba(232,222,190,.8)'; c.font = 'bold 58px Arial Black, Arial, sans-serif'; c.fillText(t1, 0, 0); c.font = 'bold 22px Arial, sans-serif'; c.fillStyle = 'rgba(232,222,190,.65)'; c.fillText(t2, 0, 36); c.fillText('LOT 7-' + (1000 + rnd(9000) | 0), 0, -54); c.restore();
+  speckle(c, w, h, 6000, 30, 90, 1.2, .25); fbm(c, w, h, { alpha: .3, blend: 'multiply', octaves: [4, 8, 16] });
+}, { strength: 2 }); }
+crateSet('crate', 0); crateSet('crate2', 1); crateSet('crate3', 2);
+// —— 麻袋（0.5m）——
+makeSet('burlap', 256, 256, .5, (c, hg, rg, w, h) => {
+  c.fillStyle = '#95855a'; c.fillRect(0, 0, w, h); fbm(c, w, h, { alpha: .45 }); weave(c, w, h, 4, 'rgba(255,255,255,.09)', 'rgba(0,0,0,.16)'); weave(hg, w, h, 4, '#9c9c9c', '#666666'); speckle(c, w, h, 3000, 60, 200, 1, .25); rg.fillStyle = '#ffffff'; rg.fillRect(0, 0, w, h);
+}, { strength: 1.5 });
+// —— 数码迷彩 / 战术尼龙 ——
+makeSet('camo', 256, 256, 1, (c, hg, rg, w, h) => {
+  c.fillStyle = '#76704e'; c.fillRect(0, 0, w, h);
+  const cols = ['#5a5a3b', '#8d8462', '#474a30', '#a39770', '#6a5c40', '#3d4a35'];
+  for (let i = 0; i < 260; i++) { const x = rnd(w), y = rnd(h), r = rnd(8, 34); blob(c, x, y, r, cols[rnd(cols.length) | 0], .5); if (x < r) blob(c, x + w, y, r, c.fillStyle, .5); if (y < r) blob(c, x, y + h, r, c.fillStyle, .5); }
+  for (let i = 0; i < 500; i++) { c.fillStyle = cols[rnd(cols.length) | 0]; c.fillRect(rnd(w), rnd(h), rnd(2, 5), rnd(2, 5)); }
+  weave(c, w, h, 3, 'rgba(255,255,255,.06)', 'rgba(0,0,0,.1)'); weave(hg, w, h, 3, '#8c8c8c', '#747474'); fbm(c, w, h, { alpha: .3, blend: 'multiply', octaves: [6, 12] }); rg.fillStyle = '#f6f6f6'; rg.fillRect(0, 0, w, h);
+}, { strength: 1.2 });
+makeSet('gear', 256, 256, .5, (c, hg, rg, w, h) => {
+  c.fillStyle = '#2a2c2a'; c.fillRect(0, 0, w, h); fbm(c, w, h, { alpha: .3 }); weave(c, w, h, 3, 'rgba(255,255,255,.07)', 'rgba(0,0,0,.14)'); weave(hg, w, h, 3, '#8c8c8c', '#747474'); rg.fillStyle = '#e8e8e8'; rg.fillRect(0, 0, w, h);
+  for (let i = 0; i < 6; i++) { const y = rnd(h); c.strokeStyle = 'rgba(80,80,75,.6)'; c.setLineDash([4, 3]); c.lineWidth = 1; c.beginPath(); c.moveTo(0, y); c.lineTo(w, y); c.stroke(); c.setLineDash([]); }
+}, { strength: 1.2 });
+// —— 枪钢 / 拉丝金属（0.5m）——
+makeSet('gunmetal', 256, 256, .5, (c, hg, rg, w, h) => {
+  c.fillStyle = '#34373c'; c.fillRect(0, 0, w, h); rg.fillStyle = '#7a7a7a'; rg.fillRect(0, 0, w, h);
+  for (let i = 0; i < 2500; i++) { c.fillStyle = `rgba(255,255,255,${rnd(.03, .1)})`; c.fillRect(rnd(w), rnd(h), rnd(10, 60), 1); }
+  for (let i = 0; i < 1500; i++) { c.fillStyle = `rgba(0,0,0,${rnd(.05, .2)})`; c.fillRect(rnd(w), rnd(h), rnd(10, 60), 1); }
+  for (let i = 0; i < 22; i++) { const x = rnd(w), y = rnd(h), a = rnd(6.28), l = rnd(10, 50); c.strokeStyle = 'rgba(200,205,210,.4)'; c.lineWidth = 1; c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); c.stroke(); rg.strokeStyle = 'rgba(50,50,50,.9)'; rg.beginPath(); rg.moveTo(x, y); rg.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); rg.stroke(); hg.strokeStyle = 'rgba(100,100,100,.8)'; hg.beginPath(); hg.moveTo(x, y); hg.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); hg.stroke(); }
+  fbm(c, w, h, { alpha: .25, blend: 'multiply', octaves: [4, 8] }); fbm(rg, w, h, { alpha: .3, blend: 'source-over', octaves: [4, 8, 16] });
+}, { strength: 1.2, metalness: .85 });
+// —— 油毡屋顶（2m）——
+makeSet('roof', 256, 256, 2, (c, hg, rg, w, h) => {
+  c.fillStyle = '#3a3936'; c.fillRect(0, 0, w, h); fbm(c, w, h, { alpha: .4 }); speckle(c, w, h, 14000, 50, 150, 1.6, .9); speckle(hg, w, h, 9000, 90, 170, 1.6, .9);
+  c.fillStyle = 'rgba(0,0,0,.4)'; c.fillRect(0, h / 2 - 2, w, 4); hg.fillStyle = '#5a5a5a'; hg.fillRect(0, h / 2 - 2, w, 4);
+  for (let i = 0; i < 3; i++) radial(c, rnd(w), rnd(h), rnd(30, 70), 'rgba(20,22,26,.6)', 'rgba(20,22,26,0)'); rg.fillStyle = '#f8f8f8'; rg.fillRect(0, 0, w, h);
+}, { strength: 2 });
+// —— 刷漆灰泥墙（2m）——
+makeSet('plaster', 512, 512, 2, (c, hg, rg, w, h) => {
+  c.fillStyle = '#9a9080'; c.fillRect(0, 0, w, h); fbm(c, w, h, { alpha: .4 }); fbm(c, w, h, { alpha: .25, blend: 'multiply', octaves: [3, 6, 12] }); speckle(hg, w, h, 4000, 118, 140, 1.2, .8); rg.fillStyle = '#e8e8e8'; rg.fillRect(0, 0, w, h);
+  for (let i = 0; i < 5; i++) {
+    const x = rnd(w * .8) + w * .1, y = rnd(h * .8) + h * .1, r = rnd(25, 70);
+    blob(c, x, y, r, '#6e6c66', .45); blob(hg, x, y, r, '#5c5c5c', .45); blob(rg, x, y, r, '#f8f8f8', .45);
+    c.strokeStyle = 'rgba(60,55,50,.6)'; c.lineWidth = 2; c.beginPath(); c.arc(x, y, r * .95, 0, 7); c.stroke();
+    speckle(c, w, h, 100, 100, 150, 1, .2);
+  }
+  cracks([[c, 'rgba(55,50,45,.65)', 1.3], [hg, 'rgba(70,70,70,.9)', 1.8]], w, h, 6, 12, 22);
+  for (let i = 0; i < 8; i++) { const x = rnd(w), y = rnd(h), len = rnd(60, 200); const gr = c.createLinearGradient(0, y, 0, y + len); gr.addColorStop(0, 'rgba(60,55,45,.35)'); gr.addColorStop(1, 'rgba(60,55,45,0)'); c.fillStyle = gr; c.fillRect(x, y, rnd(4, 14), len); }
+}, { strength: 2.5 });
+// —— 锈蚀喷漆金属（油桶、垃圾箱、卡车）——
+function rustMetal(name, paint, rust = 1) {
+  makeSet(name, 256, 256, 1, (c, hg, rg, w, h) => {
+    c.fillStyle = paint; c.fillRect(0, 0, w, h); fbm(c, w, h, { alpha: .4 }); rg.fillStyle = '#8a8a8a'; rg.fillRect(0, 0, w, h);
+    for (let i = 0; i < 12 * rust; i++) { const x = rnd(w), y = rnd(h), r = rnd(8, 30); blob(c, x, y, r, `rgba(${105 + rnd(40) | 0},${50 + rnd(25) | 0},${20 + rnd(12) | 0},.8)`, .55); blob(rg, x, y, r, 'rgba(255,255,255,.9)', .55); blob(c, x, y, r * .5, `rgba(${60 + rnd(30) | 0},${30 + rnd(15) | 0},${12 | 0},.7)`, .5); }
+    for (let i = 0; i < 20 * rust; i++) { const x = rnd(w), y = rnd(h), len = rnd(20, 90), lw = rnd(1.5, 4); const gr = c.createLinearGradient(0, y, 0, y + len); gr.addColorStop(0, 'rgba(110,55,20,.55)'); gr.addColorStop(1, 'rgba(90,40,15,0)'); c.fillStyle = gr; c.fillRect(x, y, lw, len); }
+    for (let i = 0; i < 5; i++) radial(hg, rnd(w), rnd(h), rnd(15, 40), 'rgba(80,80,80,.8)', 'rgba(80,80,80,0)');
+    for (let i = 0; i < 15; i++) { const x = rnd(w), y = rnd(h), a = rnd(6.28), l = rnd(10, 50); c.strokeStyle = 'rgba(220,220,215,.3)'; c.lineWidth = 1; c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); c.stroke(); }
+    fbm(c, w, h, { alpha: .25, blend: 'multiply', octaves: [4, 8] });
+  }, { strength: 2, metalness: .55 });
+}
+rustMetal('drumRed', '#8c2f22'); rustMetal('drumBlue', '#2f4458'); rustMetal('drumOlive', '#5a6240', .7); rustMetal('truck', '#616a46', .6); rustMetal('dumpster', '#2f5a3a', .9); rustMetal('steel', '#3a3d41', .35);
+// —— 特效贴图 ——
+TEX_FLASH: {
+  TEX.flash = (() => {
+    const [cv, g] = mkCanvas(128);
     const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(255,255,230,1)'); gr.addColorStop(.25, 'rgba(255,200,90,.9)'); gr.addColorStop(.6, 'rgba(255,120,30,.25)'); gr.addColorStop(1, 'rgba(255,80,0,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
-    g.strokeStyle = 'rgba(255,230,150,.8)'; g.lineWidth = 3;
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128); g.strokeStyle = 'rgba(255,230,150,.8)'; g.lineWidth = 3;
     for (let i = 0; i < 7; i++) { const a = i / 7 * Math.PI * 2; g.beginPath(); g.moveTo(64, 64); g.lineTo(64 + Math.cos(a) * 62, 64 + Math.sin(a) * 62); g.stroke(); }
     const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
-  })(),
-  hole: (() => {
-    const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d');
+  })();
+  TEX.hole = (() => {
+    const [cv, g] = mkCanvas(64);
     const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(10,10,10,1)'); gr.addColorStop(.4, 'rgba(20,20,20,.9)'); gr.addColorStop(.7, 'rgba(40,40,40,.35)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
-    const t = new THREE.CanvasTexture(cv); return t;
-  })(),
-};
-
-// 带贴图重复的材质缓存（按面尺寸）
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(cv);
+  })();
+}
+// 贴图组 → 材质（按物体尺寸设定重复次数并缓存）
 const matCache = new Map();
-function texMat(kind, rx, ry, extra = {}) {
-  rx = Math.max(1, Math.round(rx)); ry = Math.max(1, Math.round(ry));
-  const key = kind + rx + 'x' + ry;
+function texMat(kind, wm, hm, extra = {}) {
+  const set = SETS[kind]; if (!set) throw new Error('no texture ' + kind);
+  const rx = Math.max(.05, Math.round(wm / set.tile[0] * 20) / 20), ry = Math.max(.05, Math.round(hm / set.tile[1] * 20) / 20);
+  const key = kind + '|' + rx + '|' + ry + '|' + JSON.stringify(extra);
   if (matCache.has(key)) return matCache.get(key);
-  const t = TEX[kind].clone(); t.repeat.set(rx, ry); t.needsUpdate = true;
-  const rough = { asphalt: .96, concrete: .9, brick: .92, plank: .85, metal: .5, sand: .95 }[kind];
-  const m = new THREE.MeshStandardMaterial({ map: t, roughness: rough, metalness: kind === 'metal' ? .55 : 0, ...extra });
+  const cl = t => { const c = t.clone(); c.repeat.set(rx, ry); c.needsUpdate = true; return c; };
+  const m = new THREE.MeshStandardMaterial({ map: cl(set.map), normalMap: cl(set.normalMap), roughnessMap: cl(set.roughnessMap), normalScale: new THREE.Vector2(set.normalScale, set.normalScale), roughness: 1, metalness: set.metalness, envMapIntensity: .7, ...extra });
   matCache.set(key, m); return m;
+}
+// 贴花（带透明通道的平面）
+function decalTex(w, h, draw) { const [cv, g] = mkCanvas(w, h); draw(g, w, h); const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; }
+const DEC = {
+  dash: decalTex(256, 64, (g, w, h) => { g.fillStyle = 'rgba(235,235,225,.85)'; g.fillRect(0, 22, w * .5, 20); speckle(g, w, h, 300, 60, 90, 2, .35); }),
+  line: decalTex(64, 64, (g, w, h) => { g.fillStyle = 'rgba(220,190,70,.8)'; g.fillRect(0, 24, w, 16); speckle(g, w, h, 80, 60, 90, 2, .35); }),
+  zebra: decalTex(256, 256, (g, w, h) => { for (let i = 0; i < 6; i++) { g.fillStyle = 'rgba(230,230,222,.8)'; g.fillRect(0, i * 42 + 6, w, 24); } speckle(g, w, h, 600, 60, 90, 2, .4); }),
+  manhole: decalTex(128, 128, (g, w, h) => { g.fillStyle = '#2b2b29'; g.beginPath(); g.arc(64, 64, 60, 0, 7); g.fill(); g.strokeStyle = '#444'; g.lineWidth = 3; g.beginPath(); g.arc(64, 64, 52, 0, 7); g.stroke(); for (let r = 8; r < 48; r += 10) { g.beginPath(); g.arc(64, 64, r, 0, 7); g.stroke(); } for (let i = 0; i < 12; i++) { const a = i / 12 * 6.28; g.beginPath(); g.moveTo(64 + Math.cos(a) * 10, 64 + Math.sin(a) * 10); g.lineTo(64 + Math.cos(a) * 48, 64 + Math.sin(a) * 48); g.stroke(); } }),
+  grate: decalTex(128, 64, (g, w, h) => { g.fillStyle = '#1e1f1e'; g.fillRect(4, 4, w - 8, h - 8); g.fillStyle = '#3c3e3c'; for (let i = 0; i < 9; i++) g.fillRect(8 + i * 13, 8, 5, h - 16); }),
+  stain: decalTex(128, 128, (g, w, h) => { radial(g, 64, 64, 60, 'rgba(15,15,18,.55)', 'rgba(15,15,18,0)'); }),
+};
+function decal(tex, x, z, w, h, rot = 0, y = .012) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: .9, polygonOffset: true, polygonOffsetFactor: -1, depthWrite: false }));
+  m.rotation.set(-Math.PI / 2, 0, rot); m.position.set(x, y, z); m.receiveShadow = true; scene.add(m); return m;
+}
+function signTex(line1, line2, w = 512, h = 160) {
+  return decalTex(w, h, (g) => {
+    g.fillStyle = '#3b3f3a'; g.fillRect(0, 0, w, h); fbm(g, w, h, { alpha: .35 }); g.strokeStyle = '#1a1c1a'; g.lineWidth = 8; g.strokeRect(4, 4, w - 8, h - 8);
+    g.fillStyle = '#e3dccb'; g.textAlign = 'center'; g.font = `bold ${h * .42 | 0}px "PingFang SC","Microsoft YaHei",Arial,sans-serif`; g.fillText(line1, w / 2, h * .5);
+    g.font = `bold ${h * .2 | 0}px Arial,sans-serif`; g.fillStyle = '#c9b765'; g.fillText(line2, w / 2, h * .82);
+    for (let i = 0; i < 4; i++) { const x = rnd(w), y = rnd(h); radial(g, x, y, rnd(20, 50), 'rgba(110,55,20,.5)', 'rgba(110,55,20,0)'); }
+    speckle(g, w, h, 500, 30, 80, 2, .3);
+  });
 }
 
 // ============================================================
 //  世界 / 关卡
 // ============================================================
 const world = { boxes: [], meshes: [] };       // 碰撞盒 & 可被射线击中的网格
-const SCALE = 2; // 每 2 米重复一次贴图
+const solid = (x, y, z, w, h, d) => world.boxes.push({ min: V3(x - w / 2, y, z - d / 2), max: V3(x + w / 2, y + h, z + d / 2) });
 
-function addBox(x, y, z, w, h, d, kind, { solid = true, shadow = true } = {}) {
+function addBox(x, y, z, w, h, d, kind, { solid: isSolid = true, shadow = true, hit = true, rotY = 0 } = {}) {
   const geo = new THREE.BoxGeometry(w, h, d);
-  let mat;
-  if (typeof kind === 'string') {
-    mat = [texMat(kind, d / SCALE, h / SCALE), texMat(kind, d / SCALE, h / SCALE),
-           texMat(kind, w / SCALE, d / SCALE), texMat(kind, w / SCALE, d / SCALE),
-           texMat(kind, w / SCALE, h / SCALE), texMat(kind, w / SCALE, h / SCALE)];
-  } else mat = kind;
+  const mat = typeof kind === 'string'
+    ? [texMat(kind, d, h), texMat(kind, d, h), texMat(kind, w, d), texMat(kind, w, d), texMat(kind, w, h), texMat(kind, w, h)]
+    : kind;
   const m = new THREE.Mesh(geo, mat);
-  m.position.set(x, y + h / 2, z);
+  m.position.set(x, y + h / 2, z); m.rotation.y = rotY;
   m.castShadow = shadow; m.receiveShadow = true;
-  scene.add(m); world.meshes.push(m);
-  if (solid) world.boxes.push({ min: V3(x - w / 2, y, z - d / 2), max: V3(x + w / 2, y + h, z + d / 2) });
+  scene.add(m); if (hit) world.meshes.push(m);
+  if (isSolid) solid(x, y, z, w, h, d);
   return m;
 }
-function addCyl(x, y, z, r, h, mat) {
-  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 16), mat);
+function addCyl(x, y, z, r, h, mat, { solid: isSolid = true, seg = 20, hit = true } = {}) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, seg), mat);
   m.position.set(x, y + h / 2, z); m.castShadow = m.receiveShadow = true;
-  scene.add(m); world.meshes.push(m);
-  world.boxes.push({ min: V3(x - r, y, z - r), max: V3(x + r, y + h, z + r) });
+  scene.add(m); if (hit) world.meshes.push(m);
+  if (isSolid) solid(x, y, z, r * 2, h, r * 2);
   return m;
 }
-
-// 地面
-{
-  const g = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), texMat('asphalt', 60, 60));
-  g.rotation.x = -Math.PI / 2; g.receiveShadow = true; scene.add(g); world.meshes.push(g);
-  // 中央广场铺装
-  const p = new THREE.Mesh(new THREE.PlaneGeometry(26, 26), texMat('concrete', 10, 10));
-  p.rotation.x = -Math.PI / 2; p.position.y = .01; p.receiveShadow = true; scene.add(p); world.meshes.push(p);
+// 几何合批：大量小部件合成一个网格，减少 draw call
+class Batch {
+  constructor() { this.pos = []; this.nor = []; this.uv = []; this.idx = []; this.n = 0; }
+  add(geo, x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) {
+    const m = new THREE.Matrix4().compose(V3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), V3(sx, sy, sz));
+    const g = geo.index ? geo.clone() : geo.toNonIndexed(); g.applyMatrix4(m);
+    const p = g.attributes.position.array, nn = g.attributes.normal.array, u = g.attributes.uv.array;
+    for (let i = 0; i < p.length; i++) { this.pos.push(p[i]); this.nor.push(nn[i]); }
+    for (let i = 0; i < u.length; i++) this.uv.push(u[i]);
+    if (g.index) { const ii = g.index.array; for (let i = 0; i < ii.length; i++) this.idx.push(ii[i] + this.n); }
+    else for (let i = 0; i < p.length / 3; i++) this.idx.push(this.n + i);
+    this.n += p.length / 3; return this;
+  }
+  box(w, h, d, x, y, z, rx, ry, rz) { return this.add(new THREE.BoxGeometry(w, h, d), x, y, z, rx, ry, rz); }
+  mesh(mat, { shadow = true, hit = false, receive = true } = {}) {
+    if (!this.n) return null;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nor, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
+    g.setIndex(this.idx); g.computeBoundingSphere(); g.computeBoundingBox();
+    const m = new THREE.Mesh(g, mat); m.castShadow = shadow; m.receiveShadow = receive; scene.add(m); if (hit) world.meshes.push(m); return m;
+  }
 }
-// 外墙
-const ARENA = 45;
-addBox(0, 0, -ARENA, ARENA * 2 + 1, 6, 1, 'brick'); addBox(0, 0, ARENA, ARENA * 2 + 1, 6, 1, 'brick');
-addBox(-ARENA, 0, 0, 1, 6, ARENA * 2 + 1, 'brick'); addBox(ARENA, 0, 0, 1, 6, ARENA * 2 + 1, 'brick');
+// 通用材质
+const M = {
+  steel: texMat('steel', 1, 1), dark: new THREE.MeshStandardMaterial({ color: 0x1b1d1f, roughness: .6, metalness: .5 }),
+  rubber: new THREE.MeshStandardMaterial({ color: 0x151617, roughness: .95 }),
+  glass: new THREE.MeshStandardMaterial({ color: 0x0b1116, roughness: .06, metalness: .95, emissive: 0xffb860, emissiveIntensity: 0, envMapIntensity: 1.4 }),
+  glassLit: new THREE.MeshStandardMaterial({ color: 0x0b1116, roughness: .06, metalness: .95, emissive: 0xffb860, emissiveIntensity: 0, envMapIntensity: 1.4 }),
+  frame: new THREE.MeshStandardMaterial({ color: 0x2a2d30, roughness: .55, metalness: .6 }),
+  cone: new THREE.MeshStandardMaterial({ color: 0xff6a1a, roughness: .7 }), white: new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: .7 }),
+  wire: new THREE.LineBasicMaterial({ color: 0x0a0a0a }),
+};
 
-// 建筑
-addBox(-18, 0, -10, 14, 7, 12, 'concrete');  addBox(-18, 7, -10, 14.6, .5, 12.6, 'concrete');   // 带檐口
-addBox(-18, 0, -3.2, 6, 3.5, 1.6, 'concrete');                                                 // 门厅
-addBox(20, 0, -18, 12, 9, 16, 'brick');      addBox(20, 9, -18, 12.6, .5, 16.6, 'concrete');
-addBox(20, 0, -9.2, 4, 2.6, 1.8, 'metal');                                                     // 卷帘门体
-addBox(0, 0, -36, 24, 6, 8, 'concrete');     addBox(0, 6, -36, 24.6, .5, 8.6, 'concrete');
-addBox(22, 0, 18, 10, 4, 8, 'concrete');     addBox(22, 4, 18, 10.6, .4, 8.6, 'concrete');
-addBox(-24, 0, 22, 8, 5, 8, 'brick');        addBox(-24, 5, 22, 8.6, .4, 8.6, 'concrete');
+// ---------- 地面 / 道路 / 广场 ----------
+{
+  const g = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), texMat('asphalt', 200, 200)); g.rotation.x = -Math.PI / 2; g.receiveShadow = true; scene.add(g); world.meshes.push(g);
+  const p = new THREE.Mesh(new THREE.PlaneGeometry(26, 26), texMat('concrete', 26, 26)); p.rotation.x = -Math.PI / 2; p.position.y = .13; p.receiveShadow = true; scene.add(p); world.meshes.push(p);
+  // 广场路牙（可踏上的台阶）
+  addBox(0, 0, 0, 26.3, .13, 26.3, 'concrete', { shadow: false });
+  // 南侧道路标线：中心虚线 + 黄色边线 + 斑马线
+  for (let x = -44; x < 44; x += 4) decal(DEC.dash, x + 1, 34, 4, 1);
+  decal(DEC.line, 0, 30.9, 88, .5); decal(DEC.line, 0, 37.1, 88, .5);
+  decal(DEC.zebra, 0, 34, 6, 6, Math.PI / 2);
+  // 路牙
+  addBox(-24, 0, 30.5, 40, .14, .3, 'concrete', { shadow: false }); addBox(24, 0, 30.5, 40, .14, .3, 'concrete', { shadow: false });
+  addBox(-24, 0, 37.5, 40, .14, .3, 'concrete', { shadow: false }); addBox(24, 0, 37.5, 40, .14, .3, 'concrete', { shadow: false });
+  decal(DEC.manhole, -15, 35.2, 1, 1); decal(DEC.manhole, 20, 32.8, 1, 1); decal(DEC.grate, -9, 30.2, 1, .5); decal(DEC.grate, 9, 30.2, 1, .5);
+  for (let i = 0; i < 10; i++) decal(DEC.stain, rnd(-40, 40), rnd(-40, 40), rnd(2, 5), rnd(2, 5), rnd(6), .011);
+}
+// ---------- 外墙（砖墙 + 压顶 + 铁丝网柱） ----------
+const ARENA = 45;
+{
+  addBox(0, 0, -ARENA, ARENA * 2 + 1, 5.5, 1, 'brick'); addBox(0, 0, ARENA, ARENA * 2 + 1, 5.5, 1, 'brick');
+  addBox(-ARENA, 0, 0, 1, 5.5, ARENA * 2 + 1, 'brick'); addBox(ARENA, 0, 0, 1, 5.5, ARENA * 2 + 1, 'brick');
+  addBox(0, 5.5, -ARENA, ARENA * 2 + 1.3, .25, 1.3, 'concrete', { solid: false }); addBox(0, 5.5, ARENA, ARENA * 2 + 1.3, .25, 1.3, 'concrete', { solid: false });
+  addBox(-ARENA, 5.5, 0, 1.3, .25, ARENA * 2 + 1.3, 'concrete', { solid: false }); addBox(ARENA, 5.5, 0, 1.3, .25, ARENA * 2 + 1.3, 'concrete', { solid: false });
+  const b = new Batch(), pil = new THREE.CylinderGeometry(.03, .03, 1, 6);
+  for (let i = -ARENA; i <= ARENA; i += 6) { b.add(pil, i, 6.2, -ARENA, .5); b.add(pil, i, 6.2, ARENA, -.5); b.add(pil, -ARENA, 6.2, i, 0, 0, -.5); b.add(pil, ARENA, 6.2, i, 0, 0, .5); }
+  for (let k = 0; k < 3; k++) { const y = 5.9 + k * .35, off = .25 + k * .12; b.add(new THREE.CylinderGeometry(.006, .006, ARENA * 2, 4), 0, y, -ARENA + off, 0, 0, Math.PI / 2); b.add(new THREE.CylinderGeometry(.006, .006, ARENA * 2, 4), 0, y, ARENA - off, 0, 0, Math.PI / 2); b.add(new THREE.CylinderGeometry(.006, .006, ARENA * 2, 4), -ARENA + off, y, 0, Math.PI / 2); b.add(new THREE.CylinderGeometry(.006, .006, ARENA * 2, 4), ARENA - off, y, 0, Math.PI / 2); }
+  b.mesh(M.dark);
+  // 墙体加固壁柱
+  for (let i = -ARENA + 9; i < ARENA; i += 9) { addBox(i, 0, -ARENA + .7, .6, 5.6, .5, 'concrete', { solid: false }); addBox(i, 0, ARENA - .7, .6, 5.6, .5, 'concrete', { solid: false }); addBox(-ARENA + .7, 0, i, .5, 5.6, .6, 'concrete', { solid: false }); addBox(ARENA - .7, 0, i, .5, 5.6, .6, 'concrete', { solid: false }); }
+}
+// ---------- 建筑生成器 ----------
+function building(x, z, w, h, d, { wall = 'concrete', floors = Math.max(1, Math.round(h / 3.3)), door = 'S', doorType = 'steel', windows = true, sign = null, tall = false } = {}) {
+  addBox(x, 0, z, w, h, d, wall);
+  addBox(x, 0, z, w + .16, .6, d + .16, 'concrete', { solid: false });                 // 勒脚
+  addBox(x, h, z, w + .1, .06, d + .1, 'roof', { solid: false, shadow: false });     // 屋面
+  const pt = .3, ph = .55;                                                          // 女儿墙
+  addBox(x, h, z - d / 2 + pt / 2, w, ph, pt, 'concrete', { solid: false }); addBox(x, h, z + d / 2 - pt / 2, w, ph, pt, 'concrete', { solid: false });
+  addBox(x - w / 2 + pt / 2, h, z, pt, ph, d, 'concrete', { solid: false }); addBox(x + w / 2 - pt / 2, h, z, pt, ph, d, 'concrete', { solid: false });
+  addBox(x, h + ph, z, w + .12, .08, d + .12, 'concrete', { solid: false, shadow: false });
+  const frames = new Batch(), sills = new Batch(), glass = new Batch(), glassL = new Batch(), bars = new Batch();
+  const fh = h / floors, ww = 1.1, wh = 1.35;
+  const faces = [{ k: 'S', nx: 0, nz: 1, len: w }, { k: 'N', nx: 0, nz: -1, len: w }, { k: 'E', nx: 1, nz: 0, len: d }, { k: 'W', nx: -1, nz: 0, len: d }];
+  for (const f of faces) {
+    const count = Math.max(1, Math.floor(f.len / 3)); const gap = f.len / count;
+    const sx = f.nx ? x + f.nx * w / 2 : 0, sz = f.nz ? z + f.nz * d / 2 : 0; const ry = f.nx ? Math.PI / 2 : 0;
+    for (let fl = 0; fl < floors; fl++) for (let i = 0; i < count; i++) {
+      const t = -f.len / 2 + gap * (i + .5); const px = f.nx ? sx : x + t, pz = f.nz ? sz : z + t;
+      const isDoor = fl === 0 && f.k === door && i === Math.floor(count / 2);
+      const cy = fl * fh + (isDoor ? 0 : fh * .55);
+      const out = (o, a) => [px + f.nx * o + (f.nz ? a : 0), pz + f.nz * o + (f.nx ? a : 0)];
+      if (isDoor) {
+        const roll = doorType === 'roll', dw = roll ? 3.2 : 1.1, dh = roll ? 2.8 : 2.2;
+        const [dx, dz] = out(.04, 0);
+        if (roll) { addBox(dx, 0, dz, f.nx ? .1 : dw, dh, f.nz ? .1 : dw, 'contGrey', { solid: false }); const [hx, hz] = out(.1, 0); frames.box(f.nx ? .2 : dw + .3, .25, f.nz ? .2 : dw + .3, hx, dh + .1, hz); }
+        else {
+          frames.box(f.nx ? .1 : dw + .2, dh + .1, f.nz ? .1 : dw + .2, dx, dh / 2 + .05, dz);
+          const [px2, pz2] = out(.08, 0); addBox(px2, 0, pz2, f.nx ? .06 : dw, dh, f.nz ? .06 : dw, 'steel', { solid: false });
+          const [kx, kz] = out(.14, dw * .35); bars.add(new THREE.SphereGeometry(.04, 6, 6), kx, 1.05, kz);
+          const [sx3, sz3] = out(.2, 0); sills.box(f.nx ? .4 : dw + .6, .15, f.nz ? .4 : dw + .6, sx3, .075, sz3);
+        }
+        const [lx, lz] = out(.15, 0); bars.box(.25, .12, .2, lx, dh + .35, lz);
+        continue;
+      }
+      if (!windows) continue;
+      const [gx, gz] = out(.02, 0), [fx, fz] = out(.06, 0);
+      const lit = Math.random() < .4; (lit ? glassL : glass).box(f.nx ? .03 : ww, wh, f.nz ? .03 : ww, gx, cy, gz);
+      // 窗框四边 + 中梃 + 窗台
+      const t2 = .07;
+      frames.box(f.nx ? .1 : ww + .16, t2, f.nz ? .1 : ww + .16, fx, cy + wh / 2 + t2 / 2, fz); frames.box(f.nx ? .1 : ww + .16, t2, f.nz ? .1 : ww + .16, fx, cy - wh / 2 - t2 / 2, fz);
+      const [lx, lz] = out(.06, -ww / 2 - t2 / 2), [rx, rz] = out(.06, ww / 2 + t2 / 2);
+      frames.box(f.nx ? .1 : t2, wh + t2 * 2, f.nz ? .1 : t2, lx, cy, lz); frames.box(f.nx ? .1 : t2, wh + t2 * 2, f.nz ? .1 : t2, rx, cy, rz);
+      frames.box(f.nx ? .08 : ww, .04, f.nz ? .08 : ww, fx, cy + wh * .18, fz); frames.box(f.nx ? .08 : .04, wh, f.nz ? .08 : .04, fx, cy, fz);
+      const [sx2, sz2] = out(.12, 0); sills.box(f.nx ? .25 : ww + .3, .08, f.nz ? .25 : ww + .3, sx2, cy - wh / 2 - .1, sz2);
+      // 部分窗户加防盗栏 / 空调外机
+      if (Math.random() < .3) for (let k = -2; k <= 2; k++) { const [bx, bz] = out(.16, k * .22); bars.add(new THREE.CylinderGeometry(.012, .012, wh, 5), bx, cy, bz); }
+      if (Math.random() < .25 && fl > 0) { const [ax, az] = out(.35, ww / 2 + .5); addBox(ax, cy - .9, az, f.nx ? .45 : .75, .55, f.nz ? .45 : .75, 'steel', { solid: false, hit: false }); const [gx2, gz2] = out(.59, ww / 2 + .5); frames.box(f.nx ? .05 : .6, .4, f.nz ? .05 : .6, gx2, cy - .63, gz2); const [bx2, bz2] = out(.3, ww / 2 + .95); bars.box(f.nx ? .5 : .04, .04, f.nz ? .5 : .04, bx2, cy - 1.2, bz2); }
+    }
+  }
+  frames.mesh(M.frame); sills.mesh(texMat('concrete', 1, 1)); bars.mesh(M.dark);
+  glass.mesh(M.glass, { shadow: false }); const gl = glassL.mesh(M.glassLit, { shadow: false });
+  // 落水管
+  const pipe = new Batch(); const cx = x - w / 2 - .12, cz = z + d / 2 - .3;
+  pipe.add(new THREE.CylinderGeometry(.07, .07, h + .3, 8), cx, (h + .3) / 2, cz); pipe.add(new THREE.CylinderGeometry(.07, .07, .4, 8), cx - .15, h + .3, cz, 0, 0, Math.PI / 2);
+  for (let y = 1; y < h; y += 2.2) pipe.box(.26, .06, .18, cx + .06, y, cz);
+  pipe.mesh(M.steel);
+  // 屋顶设备
+  const rb = new Batch();
+  addBox(x + w * .2, h, z - d * .15, 1.6, 1.1, 1.2, 'steel', { solid: false, hit: false }); rb.box(1.5, .06, 1.1, x + w * .2, h + 1.13, z - d * .15);
+  rb.add(new THREE.CylinderGeometry(.5, .5, .08, 20), x + w * .2, h + 1.17, z - d * .15);
+  for (let i = 0; i < 3; i++) rb.add(new THREE.CylinderGeometry(.12, .14, .9, 10), x - w * .25 + i * .7, h + .45, z + d * .2).add(new THREE.CylinderGeometry(.2, .12, .22, 10), x - w * .25 + i * .7, h + .98, z + d * .2);
+  if (tall) { addCyl(x - w * .25, h, z - d * .2, .9, 1.6, texMat('steel', 1, 1), { solid: false, seg: 20, hit: false }); rb.add(new THREE.CylinderGeometry(.9, .9, .1, 20), x - w * .25, h + 1.62, z - d * .2); for (const [ox, oz] of [[-.7, -.7], [.7, -.7], [-.7, .7], [.7, .7]]) rb.add(new THREE.CylinderGeometry(.04, .04, .5, 6), x - w * .25 + ox, h + .25, z - d * .2 + oz); }
+  rb.add(new THREE.CylinderGeometry(.02, .02, 2.2, 6), x + w * .4, h + 1.1, z + d * .4); rb.mesh(M.steel);
+  if (sign) { const [sx, sz, ry] = { S: [x, z + d / 2 + .06, 0], N: [x, z - d / 2 - .06, Math.PI], E: [x + w / 2 + .06, z, Math.PI / 2], W: [x - w / 2 - .06, z, -Math.PI / 2] }[door]; const sm = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 1), new THREE.MeshStandardMaterial({ map: signTex(...sign), roughness: .6, metalness: .3 })); sm.position.set(sx, h - 1.1, sz); sm.rotation.y = ry; sm.castShadow = true; scene.add(sm); }
+  return gl;
+}
+building(-18, -10, 14, 7, 12, { wall: 'concrete', floors: 2, door: 'S', sign: ['维修车间', 'MAINTENANCE BAY 2'] });
+addBox(-18, 0, -3.2, 6, 3.4, 1.6, 'concrete'); addBox(-18, 3.4, -3.2, 6.4, .3, 2, 'concrete', { solid: false });   // 门厅
+building(20, -18, 12, 9, 16, { wall: 'brick', floors: 3, door: 'W', tall: true, sign: ['弹药库', 'AMMO DEPOT 7'] });
+building(0, -36, 24, 6, 8, { wall: 'plaster', floors: 2, door: 'S', sign: ['指挥所', 'COMMAND POST'] });
+building(22, 18, 10, 4, 8, { wall: 'concrete', floors: 1, door: 'W', doorType: 'roll', sign: ['7 号库', 'WAREHOUSE 7'] });
+building(-24, 22, 8, 5, 8, { wall: 'brick', floors: 1, door: 'E' });
 // 柱廊
-for (let i = -2; i <= 2; i++) addBox(i * 5, 0, -30, .8, 5, .8, 'concrete');
-addBox(0, 5, -30, 21.6, .6, 1.2, 'concrete');
-// 集装箱
-addBox(-5, 0, -20, 2.4, 2.6, 6, 'metal'); addBox(8, 0, 8, 6, 2.6, 2.4, 'metal');
-addBox(-30, 0, -30, 6, 2.6, 2.4, 'metal'); addBox(-30.6, 2.6, -29.6, 6, 2.6, 2.4, 'metal');
-addBox(32, 0, 4, 2.4, 2.6, 6, 'metal');
-// 卡车
-addBox(30, 0, -30, 2.3, 1.1, 6, texMat('metal', 2, 1, { color: 0x6b7a4a })); addBox(30, 1.1, -31.8, 2.3, 1.6, 2.2, texMat('metal', 1, 1, { color: 0x6b7a4a })); addBox(30, 1.1, -28.9, 2.1, 1.2, 3.4, 'plank');
-// 木箱簇
+for (let i = -2; i <= 2; i++) { addBox(i * 5, 0, -30, .8, 5, .8, 'concrete'); addBox(i * 5, 0, -30, 1.1, .3, 1.1, 'concrete', { solid: false }); addBox(i * 5, 4.7, -30, 1.1, .3, 1.1, 'concrete', { solid: false }); }
+addBox(0, 5, -30, 21.6, .6, 1.2, 'concrete'); addBox(0, 5.6, -31, 21.8, .12, 3.2, 'roof', { solid: false, shadow: false });
+
+// ---------- 集装箱 ----------
+function container(x, z, alongZ, kind, y = 0) {
+  const L = 6, H = 2.6, W = 2.44, w = alongZ ? W : L, d = alongZ ? L : W;
+  addBox(x, y, z, w, H, d, kind);
+  const b = new Batch(), door = new Batch();
+  // 角件
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) { b.box(.3, .3, .3, x + sx * (w / 2 - .15), y + .15, z + sz * (d / 2 - .15)); b.box(.3, .3, .3, x + sx * (w / 2 - .15), y + H - .15, z + sz * (d / 2 - .15)); }
+  // 底梁 / 顶梁
+  b.box(w + .04, .18, .12, x, y + .09, z - d / 2); b.box(w + .04, .18, .12, x, y + .09, z + d / 2); b.box(.12, .18, d + .04, x - w / 2, y + .09, z); b.box(.12, .18, d + .04, x + w / 2, y + .09, z);
+  // 门端：两扇门的锁杆与把手
+  const ex = alongZ ? x : x + L / 2 + .02, ez = alongZ ? z + L / 2 + .02 : z;
+  for (const off of [-.85, -.35, .35, .85]) {
+    const px = alongZ ? ex + off : ex, pz = alongZ ? ez : ez + off;
+    door.add(new THREE.CylinderGeometry(.035, .035, H - .4, 8), px, y + H / 2, pz);
+    for (const hy of [.45, H - .45]) door.box(alongZ ? .12 : .08, .08, alongZ ? .08 : .12, px, y + hy, pz);
+    door.box(alongZ ? .05 : .3, .05, alongZ ? .3 : .05, px + (alongZ ? 0 : .08), y + 1.1, pz + (alongZ ? .08 : 0));
+  }
+  b.mesh(M.dark); door.mesh(M.steel);
+}
+container(-5, -20, true, 'contRed'); container(8, 8, false, 'contBlue'); container(-30, -30, false, 'contGreen'); container(-30.6, -29.6, false, 'contYellow', 2.6); container(32, 4, true, 'contGrey');
+// ---------- 卡车 ----------
+{
+  const x = 30, z = -30, tm = texMat('truck', 1, 1);
+  addBox(x, .55, z, 2.3, .4, 6.2, M.dark);                       // 车架
+  addBox(x, .9, z - 1.9, 2.3, 1.5, 2.1, tm);                    // 驾驶室
+  addBox(x, .9, z - 3.4, 2.2, .9, .9, tm);                      // 机舱盖
+  addBox(x, 1.0, z + 1.1, 2.3, .2, 3.6, 'crate', { solid: false });  // 货床
+  addBox(x - 1.1, 1.2, z + 1.1, .1, .8, 3.6, 'crate', { solid: false }); addBox(x + 1.1, 1.2, z + 1.1, .1, .8, 3.6, 'crate', { solid: false }); addBox(x, 1.2, z + 2.85, 2.3, .8, .1, 'crate', { solid: false });
+  const b = new Batch(), gl = new Batch(), wheel = new THREE.CylinderGeometry(.5, .5, .32, 18), hub = new THREE.CylinderGeometry(.22, .22, .34, 12);
+  for (const [wx, wz] of [[-1.05, -2.6], [1.05, -2.6], [-1.05, 1.4], [1.05, 1.4], [-1.05, 2.4], [1.05, 2.4]]) { b.add(wheel, x + wx, .5, z + wz, 0, 0, Math.PI / 2); gl.add(hub, x + wx, .5, z + wz, 0, 0, Math.PI / 2); }
+  b.mesh(M.rubber); gl.mesh(M.steel);
+  const g2 = new Batch(); g2.box(2.0, .7, .05, x, 1.95, z - 2.96); g2.box(.05, .6, 1.4, x - 1.16, 1.9, z - 1.9); g2.box(.05, .6, 1.4, x + 1.16, 1.9, z - 1.9); g2.mesh(M.glass, { shadow: false });
+  const dt = new Batch(); dt.box(2.4, .25, .2, x, .75, z - 3.95); dt.box(.3, .3, .05, x - .8, 1.1, z - 3.88); dt.box(.3, .3, .05, x + .8, 1.1, z - 3.88); dt.box(.9, .4, .06, x, 1.25, z - 3.88); dt.add(new THREE.CylinderGeometry(.07, .07, 1.2, 8), x + 1.0, 2.2, z - 1.2); dt.mesh(M.dark);
+  solid(x, 0, z, 2.4, 2.4, 8);
+}
+// ---------- 弹药箱（木箱）----------
 const crates = [[2, 0, 2], [3.2, 0, 2], [2, 1.2, 2], [-3, 0, 4], [-3, 0, 5.2], [-4.2, 0, 4.6],
   [12, 0, -3], [13.2, 0, -3], [12.6, 1.2, -3], [-12, 0, 10], [-12, 0, 11.2], [26, 0, 28], [27.2, 0, 28], [26.6, 1.2, 28],
   [-20, 0, -26], [-18.8, 0, -26], [6, 0, 20], [7.2, 0, 20], [6, 0, 21.2], [6.6, 1.2, 20.6], [-34, 0, 6], [38, 0, -12], [38, 0, -10.8]];
-for (const [x, y, z] of crates) addBox(x, y, z, 1.2, 1.2, 1.2, 'plank');
-// 矮墙（掩体）
-const lows = [[0, 10, 6, .4], [-10, 0, .4, 6], [12, 2, 5, .4], [-14, -26, .4, 6], [28, 2, 5, .4], [14, 26, 6, .4], [-30, 10, .4, 6], [34, -24, .4, 6], [-6, -8, 5, .4], [0, 24, .4, 6]];
-for (const [x, z, w, d] of lows) addBox(x, 0, z, w, 1.1, d, 'concrete');
-// 沙袋
-const sandMat = texMat('sand', 1, 1);
-for (const [x, z, w, d] of [[10, 24, 4, .9], [-8, -8, .9, 4], [-2, 16, 4, .9], [24, -2, .9, 4]]) {
-  addBox(x, 0, z, w, .45, d, sandMat); addBox(x, .45, z, w * .92, .4, d * .92, sandMat);
+crates.forEach(([x, y, z], i) => addBox(x, y, z, 1.2, 1.2, 1.2, ['crate', 'crate2', 'crate3'][i % 3], { rotY: rnd(-.08, .08) }));
+// 小型弹药盒
+for (const [x, z] of [[3.6, 3.4], [-1.6, 5.6], [13.9, -1.8], [25.2, 29.2]]) addBox(x, 0, z, .6, .35, .35, 'drumOlive', { rotY: rnd(6) });
+// ---------- 泽西护栏 / 混凝土掩体 ----------
+function jersey(x, z, len, alongZ) {
+  const sh = new THREE.Shape([[-.4, 0], [.4, 0], [.4, .08], [.28, .08], [.14, .55], [.12, .85], [-.12, .85], [-.14, .55], [-.28, .08], [-.4, .08]].map(p => new THREE.Vector2(...p)));
+  const geo = new THREE.ExtrudeGeometry(sh, { depth: len, bevelEnabled: false }); geo.translate(0, 0, -len / 2);
+  const m = new THREE.Mesh(geo, texMat('concrete', 1, 1)); m.position.set(x, 0, z); m.rotation.y = alongZ ? 0 : Math.PI / 2; m.castShadow = m.receiveShadow = true; scene.add(m); world.meshes.push(m);
+  solid(x, 0, z, alongZ ? .8 : len, .85, alongZ ? len : .8);
+  // 吊装孔
+  const b = new Batch(); for (let t = -len / 2 + .6; t < len / 2; t += 1.6) b.add(new THREE.CylinderGeometry(.05, .05, .3, 8), alongZ ? x : x + t, .6, alongZ ? z + t : z, Math.PI / 2, 0, alongZ ? Math.PI / 2 : 0); b.mesh(M.dark);
 }
-// 油桶
-const barrelMat = new THREE.MeshStandardMaterial({ color: 0x8a2d1e, roughness: .55, metalness: .4 });
-const barrelMat2 = new THREE.MeshStandardMaterial({ color: 0x3a4a5a, roughness: .55, metalness: .4 });
-for (const [x, z, m] of [[-8, -14, barrelMat], [-8.9, -14.2, barrelMat2], [16, 12, barrelMat], [16.9, 12.4, barrelMat], [-26, -2, barrelMat2], [36, 34, barrelMat], [-36, 36, barrelMat2]]) addCyl(x, 0, z, .42, 1.15, m);
-// 瞭望塔
+jersey(0, 10, 6, false); jersey(12, 2, 5, false); jersey(14, 26, 6, false); jersey(-30, 10, 6, true); jersey(34, -24, 6, true); jersey(-6, -8, 5, false);
+for (const [x, z, w, d] of [[-10, 0, .4, 6], [-14, -26, .4, 6], [28, 2, 5, .4], [0, 24, .4, 6]]) { addBox(x, 0, z, w, 1.1, d, 'concrete'); addBox(x, 1.1, z, w + .1, .08, d + .1, 'concrete', { solid: false, shadow: false }); }
+// ---------- 麻袋墙 ----------
+function sandbags(x, z, len, alongZ, rows = 3) {
+  const b = new Batch(), bag = new THREE.CapsuleGeometry(.17, .42, 4, 10);
+  const per = Math.floor(len / .62);
+  for (let r = 0; r < rows; r++) for (let i = 0; i < per - (r % 2); i++) {
+    const t = -len / 2 + .31 + i * .62 + (r % 2) * .31, y = .14 + r * .27;
+    const px = alongZ ? x : x + t, pz = alongZ ? z + t : z;
+    b.add(bag, px + rnd(-.03, .03), y, pz + rnd(-.03, .03), alongZ ? Math.PI / 2 + rnd(-.1, .1) : rnd(-.1, .1), 0, alongZ ? 0 : Math.PI / 2 + rnd(-.1, .1), alongZ ? 1 : .8, 1, alongZ ? .8 : 1);
+  }
+  b.mesh(texMat('burlap', .5, .5), { hit: true }); solid(x, 0, z, alongZ ? .55 : len, rows * .27 + .1, alongZ ? len : .55);
+}
+sandbags(10, 24, 4, false); sandbags(-8, -8, 4, true); sandbags(-2, 16, 4, false); sandbags(24, -2, 4, true); sandbags(-20, 2, 3, false, 4); sandbags(16, -30, 3, true, 4);
+// ---------- 油桶 ----------
+function drum(x, z, kind, y = 0, tilt = false) {
+  const mat = texMat(kind, 1, 1);
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(.3, .3, .9, 18), mat); m.position.set(x, y + .45, z); m.castShadow = m.receiveShadow = true;
+  const b = new Batch(); b.add(new THREE.TorusGeometry(.3, .02, 8, 20), 0, -.2, 0, Math.PI / 2).add(new THREE.TorusGeometry(.3, .02, 8, 20), 0, .15, 0, Math.PI / 2).add(new THREE.TorusGeometry(.29, .025, 8, 20), 0, .45, 0, Math.PI / 2).add(new THREE.CylinderGeometry(.06, .06, .03, 8), .18, .46, 0);
+  const rings = b.mesh(M.steel); rings.position.copy(m.position);
+  if (tilt) { m.rotation.z = Math.PI / 2; m.position.y = y + .3; rings.rotation.z = Math.PI / 2; rings.position.y = y + .3; }
+  scene.add(m); world.meshes.push(m); solid(x, y, z, .6, .9, .6);
+}
+drum(-8, -14, 'drumRed'); drum(-8.7, -14.3, 'drumBlue'); drum(-8.3, -14.8, 'drumRed', .9); drum(16, 12, 'drumRed'); drum(16.7, 12.4, 'drumOlive'); drum(-26, -2, 'drumBlue'); drum(36, 34, 'drumRed'); drum(-36, 36, 'drumOlive'); drum(31, 8, 'drumBlue', 0, true); drum(10.5, -7.5, 'drumRed');
+// ---------- 垃圾箱 / 轮胎 / 托盘 / 碎石 / 交通锥 ----------
 {
-  const legMat = new THREE.MeshStandardMaterial({ color: 0x4a3c2a, roughness: .9 });
-  for (const [dx, dz] of [[-1.4, -1.4], [1.4, -1.4], [-1.4, 1.4], [1.4, 1.4]]) addCyl(36 + dx, 0, 36 + dz, .14, 6, legMat);
-  addBox(36, 6, 36, 3.6, .3, 3.6, 'plank', { solid: false });
-  addBox(36, 6.3, 34.3, 3.6, 1, .1, 'plank', { solid: false }); addBox(36, 6.3, 37.7, 3.6, 1, .1, 'plank', { solid: false });
-  addBox(34.3, 6.3, 36, .1, 1, 3.6, 'plank', { solid: false }); addBox(37.7, 6.3, 36, .1, 1, 3.6, 'plank', { solid: false });
-  addBox(36, 9, 36, 4.2, .25, 4.2, 'metal', { solid: false });
-  for (const [dx, dz] of [[-1.7, -1.7], [1.7, -1.7], [-1.7, 1.7], [1.7, 1.7]]) addCyl(36 + dx, 6.3, 36 + dz, .06, 2.7, legMat);
+  const dm = texMat('dumpster', 1, 1);
+  for (const [x, z] of [[-27.5, -12], [33, 24]]) {
+    addBox(x, .25, z, 1.9, 1.2, 1.1, dm); addBox(x, 1.45, z - .05, 1.95, .1, 1.2, dm, { solid: false });
+    const b = new Batch(); b.box(2.0, .08, .08, x, 1.0, z + .6); b.box(.08, .5, .08, x - .9, .5, z + .6); b.box(.08, .5, .08, x + .9, .5, z + .6);
+    for (const [wx, wz] of [[-.8, -.45], [.8, -.45], [-.8, .45], [.8, .45]]) b.add(new THREE.CylinderGeometry(.1, .1, .08, 10), x + wx, .12, z + wz, Math.PI / 2);
+    b.mesh(M.dark);
+  }
+  const tire = new THREE.TorusGeometry(.34, .13, 10, 20), tb = new Batch();
+  for (const [x, z, n] of [[10, -6, 3], [-2, 20, 2], [-33, 40, 4], [40, 30, 2]]) { for (let i = 0; i < n; i++) tb.add(tire, x + rnd(-.04, .04), .13 + i * .26, z + rnd(-.04, .04), Math.PI / 2, 0, rnd(6)); solid(x, 0, z, .9, n * .26, .9); }
+  tb.mesh(M.rubber, { hit: true });
+  const pb = new Batch();
+  for (const [x, z, ry] of [[4, 12, .2], [-16, 6, -.4], [28, -8, 1.2]]) { for (let i = 0; i < 5; i++) pb.box(1.2, .03, .14, 0, .14, -.5 + i * .25); for (let i = 0; i < 3; i++) pb.box(.1, .1, 1.2, -.55 + i * .55, .06, 0); const g = pb.mesh(texMat('crate', 1.2, 1.2)); if (g) { g.position.set(x, 0, z); g.rotation.y = ry; } }
+  const rub = new Batch(), rb2 = new Batch();
+  for (const [cx, cz] of [[-10.6, -17], [14, -27], [27, 9], [-36, -38], [38, -41]]) { for (let i = 0; i < 16; i++) { const s = rnd(.15, .6); rub.box(s, s * rnd(.4, .9), s * rnd(.6, 1.2), cx + rnd(-1.1, 1.1), s * .25, cz + rnd(-1.1, 1.1), rnd(.4), rnd(6), rnd(.4)); } for (let i = 0; i < 4; i++) rb2.add(new THREE.CylinderGeometry(.012, .012, rnd(.6, 1.4), 5), cx + rnd(-1, 1), .3, cz + rnd(-1, 1), rnd(6), rnd(6), rnd(6)); }
+  rub.mesh(texMat('concrete', 1, 1), { hit: true }); rb2.mesh(M.steel);
+  const cb = new Batch(), wb = new Batch(), cone = new THREE.ConeGeometry(.2, .6, 12);
+  for (const [x, z] of [[-3, 32], [0, 36.5], [3, 32], [-20, 16], [21, -3.5]]) { cb.add(cone, x, .3, z); cb.box(.5, .04, .5, x, .02, z); wb.add(new THREE.CylinderGeometry(.13, .16, .1, 12), x, .38, z); }
+  cb.mesh(M.cone); wb.mesh(M.white);
 }
-
-// 路灯
+// ---------- 瞭望塔 ----------
+{
+  const legMat = M.steel, b = new Batch();
+  for (const [dx, dz] of [[-1.4, -1.4], [1.4, -1.4], [-1.4, 1.4], [1.4, 1.4]]) addCyl(36 + dx, 0, 36 + dz, .12, 6, legMat, { seg: 10 });
+  for (let k = 0; k < 3; k++) { const y = 1 + k * 2, L = 2.8 * 1.41; b.add(new THREE.CylinderGeometry(.04, .04, 3.4, 6), 36, y + 1, 34.6, 0, 0, Math.PI / 4 * (k % 2 ? 1 : -1)); b.add(new THREE.CylinderGeometry(.04, .04, 3.4, 6), 36, y + 1, 37.4, 0, 0, Math.PI / 4 * (k % 2 ? -1 : 1)); b.add(new THREE.CylinderGeometry(.04, .04, 3.4, 6), 34.6, y + 1, 36, Math.PI / 4 * (k % 2 ? 1 : -1)); b.add(new THREE.CylinderGeometry(.04, .04, 3.4, 6), 37.4, y + 1, 36, Math.PI / 4 * (k % 2 ? -1 : 1)); }
+  for (let y = .4; y < 6; y += .35) b.add(new THREE.CylinderGeometry(.02, .02, .5, 6), 34.3, y, 36, 0, 0, Math.PI / 2);
+  b.add(new THREE.CylinderGeometry(.025, .025, 6, 6), 34.3, 3, 35.75).add(new THREE.CylinderGeometry(.025, .025, 6, 6), 34.3, 3, 36.25);
+  b.mesh(M.steel);
+  addBox(36, 6, 36, 3.6, .25, 3.6, 'crate', { solid: false });
+  const p = new Batch(); for (const [x, z, w, d] of [[36, 34.35, 3.6, .08], [36, 37.65, 3.6, .08], [34.35, 36, .08, 3.6], [37.65, 36, .08, 3.6]]) { p.box(w, .06, d, x, 7.2, z); p.box(w, .06, d, x, 6.7, z); } for (const [x, z] of [[34.35, 34.35], [37.65, 34.35], [34.35, 37.65], [37.65, 37.65], [36, 34.35], [36, 37.65], [34.35, 36], [37.65, 36]]) p.box(.08, 1.1, .08, x, 6.65, z); p.mesh(M.dark);
+  addBox(36, 9, 36, 4.2, .12, 4.2, 'contGrey', { solid: false });
+  for (const [dx, dz] of [[-1.7, -1.7], [1.7, -1.7], [-1.7, 1.7], [1.7, 1.7]]) addCyl(36 + dx, 6.1, 36 + dz, .05, 2.9, M.steel, { solid: false, seg: 8, hit: false });
+  sandbags(36, 34.6, 3, false, 2);
+}
+// ---------- 路灯 + 电线 ----------
 const lamps = [];
-const poleMat = new THREE.MeshStandardMaterial({ color: 0x2a2d31, roughness: .6, metalness: .6 });
 function addLamp(x, z, shadow) {
-  addCyl(x, 0, z, .12, 5, poleMat);
-  const arm = new THREE.Mesh(new THREE.BoxGeometry(1.4, .1, .1), poleMat); arm.position.set(x + .6, 5, z); arm.castShadow = true; scene.add(arm);
+  addCyl(x, 0, z, .11, 5.2, M.steel, { seg: 12 });
+  const b = new Batch(); b.add(new THREE.CylinderGeometry(.22, .26, .35, 12), x, .17, z); b.add(new THREE.CylinderGeometry(.06, .06, 1.6, 8), x + .7, 5.25, z, 0, 0, Math.PI / 2); b.add(new THREE.CylinderGeometry(.05, .05, 1.1, 8), x + .45, 4.85, z, 0, 0, Math.PI / 3.2);
+  b.box(.62, .14, .4, x + 1.35, 5.12, z); b.mesh(M.steel);
   const bulbMat = new THREE.MeshStandardMaterial({ color: 0xffd9a0, emissive: 0xffb050, emissiveIntensity: 0, roughness: .3 });
-  const head = new THREE.Mesh(new THREE.BoxGeometry(.5, .18, .35), bulbMat); head.position.set(x + 1.2, 4.95, z); scene.add(head);
-  const light = new THREE.PointLight(0xffb060, 0, 26, 2); light.position.set(x + 1.2, 4.75, z);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(.5, .05, .3), bulbMat); head.position.set(x + 1.35, 5.03, z); scene.add(head);
+  const light = new THREE.PointLight(0xffb060, 0, 26, 2); light.position.set(x + 1.35, 4.8, z);
   if (shadow) { light.castShadow = true; light.shadow.mapSize.set(512, 512); light.shadow.bias = -0.004; }
-  scene.add(light); lamps.push({ light, bulbMat, flick: rnd(100) });
+  scene.add(light); lamps.push({ light, bulbMat, flick: rnd(100), top: V3(x, 5.2, z) });
 }
 addLamp(-12, 12, true); addLamp(14, -8, true); addLamp(-28, -6, false); addLamp(30, 26, false); addLamp(0, -22, false);
+{
+  const pts = [];
+  const wire = (a, b) => { for (let i = 0; i <= 12; i++) { const t = i / 12; const p = a.clone().lerp(b, t); p.y -= Math.sin(t * Math.PI) * .9; pts.push(p); if (i && i < 12) pts.push(p.clone()); } };
+  wire(lamps[0].top, lamps[1].top); wire(lamps[1].top, lamps[4].top); wire(lamps[0].top, lamps[2].top); wire(lamps[3].top, V3(ARENA - .5, 5.6, 12));
+  scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), M.wire));
+}
 // 瞭望塔探照灯
 const towerLight = new THREE.SpotLight(0xfff0d0, 0, 60, .35, .4, 1.5); towerLight.position.set(36, 8.8, 36); towerLight.target.position.set(10, 0, 10);
 towerLight.castShadow = true; towerLight.shadow.mapSize.set(1024, 1024); towerLight.shadow.bias = -0.002; scene.add(towerLight, towerLight.target);
+{ const b = new Batch(); b.add(new THREE.CylinderGeometry(.25, .3, .4, 12), 36, 8.9, 36, Math.PI / 2.6).box(.15, .4, .15, 36, 9.2, 36); b.mesh(M.dark); }
 
 // ============================================================
 //  光照系统（昼夜预设 + 平滑过渡）
 // ============================================================
 const sun = new THREE.DirectionalLight(0xfff4e2, 3.2);
-sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
 Object.assign(sun.shadow.camera, { near: 1, far: 220, left: -75, right: 75, top: 75, bottom: -75 });
 sun.shadow.bias = -0.0004; sun.shadow.normalBias = .04;
 scene.add(sun, sun.target);
@@ -402,9 +778,20 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(380, 32, 16), new THREE.Shad
       gl_FragColor = vec4(col,1.); }`
 }));
 scene.add(sky);
+// 环境反射贴图：从天空穹顶生成 PMREM，让金属 / 玻璃有真实反射
+const pmrem = new THREE.PMREMGenerator(renderer); pmrem.compileEquirectangularShader();
+const envScene = new THREE.Scene();
+const envSky = new THREE.Mesh(sky.geometry, sky.material); envScene.add(envSky);
+const envGround = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.MeshBasicMaterial({ color: 0x3a3a38 })); envGround.rotation.x = -Math.PI / 2; envGround.position.y = -2; envScene.add(envGround);
+let envRT = null, envTimer = 0;
+function rebuildEnv() {
+  envGround.material.color.copy(L.fog).multiplyScalar(.35);
+  const rt = pmrem.fromScene(envScene, .04, 1, 1000);
+  scene.environment = rt.texture; gunScene.environment = rt.texture; if (envRT) envRT.dispose(); envRT = rt;
+}
 
 const PRESETS = [
-  { name: '正午', sunPos: [40, 70, 25], sunColor: 0xfff4e2, sunI: 3.4, hemiSky: 0x9ec5ff, hemiGround: 0x6b5a48, hemiI: .75, fog: 0xb9cfe3, fogD: .0055, top: 0x2a6fd6, horizon: 0xbdd4ea, exposure: 1.0, lamps: 0, stars: 0, tower: 0 },
+  { name: '正午', sunPos: [40, 70, 25], sunColor: 0xfff4e2, sunI: 3.0, hemiSky: 0x9ec5ff, hemiGround: 0x6b5a48, hemiI: .95, fog: 0xb9cfe3, fogD: .0055, top: 0x2a6fd6, horizon: 0xbdd4ea, exposure: 1.0, lamps: 0, stars: 0, tower: 0 },
   { name: '黄昏', sunPos: [70, 12, -40], sunColor: 0xff9140, sunI: 2.6, hemiSky: 0x5c5486, hemiGround: 0x3a2a20, hemiI: .5, fog: 0xc98a60, fogD: .009, top: 0x27285a, horizon: 0xf09a60, exposure: .95, lamps: .6, stars: .25, tower: 0 },
   { name: '夜晚', sunPos: [-30, 60, 20], sunColor: 0x7f94c8, sunI: .3, hemiSky: 0x16203a, hemiGround: 0x08080a, hemiI: .22, fog: 0x060810, fogD: .016, top: 0x02040c, horizon: 0x0e1628, exposure: .9, lamps: 1, stars: 1, tower: 1 },
 ];
@@ -415,6 +802,7 @@ function setPreset(i, instant) {
   const p = PRESETS[i]; todIndex = i; $('tod').textContent = p.name;
   T.sunPos = p.sunPos; T.sunColor = p.sunColor; T.sunI = p.sunI; T.hemiSky = p.hemiSky; T.hemiGround = p.hemiGround; T.hemiI = p.hemiI;
   T.fog = p.fog; T.fogD = p.fogD; T.top = p.top; T.horizon = p.horizon; T.exposure = p.exposure; T.lamps = p.lamps; T.stars = p.stars; T.tower = p.tower;
+  envTimer = instant ? .01 : 2.8;
   if (instant) updateLighting(1e9);
 }
 const tmpC = new THREE.Color();
@@ -435,6 +823,8 @@ function updateLighting(dt) {
     lp.light.intensity = 70 * L.lamps * f; lp.bulbMat.emissiveIntensity = 3 * L.lamps * f;
   }
   towerLight.intensity = 500 * L.tower;
+  M.glassLit.emissiveIntensity = 2.4 * L.lamps; M.glass.emissiveIntensity = .15 * L.lamps;
+  if (envTimer > 0) { envTimer -= dt; if (envTimer <= 0) rebuildEnv(); }
   // 探照灯缓慢扫视
   towerLight.target.position.set(10 + Math.sin(now * .25) * 18, 0, 10 + Math.cos(now * .18) * 18);
 }
@@ -520,30 +910,49 @@ const gunSun = new THREE.DirectionalLight(0xffffff, 1), gunHemi = new THREE.Hemi
 const gunFill = new THREE.DirectionalLight(0xffffff, .5); gunFill.position.set(.5, .8, 1); gunCam.add(gunFill, gunFill.target);
 const gun = new THREE.Group(); gunCam.add(gun);
 {
-  const dark = new THREE.MeshStandardMaterial({ color: 0x2b2e34, roughness: .5, metalness: .45 });
-  const dark2 = new THREE.MeshStandardMaterial({ color: 0x3c4047, roughness: .65, metalness: .3 });
-  const tan = new THREE.MeshStandardMaterial({ color: 0x8c7a5c, roughness: .8 });
-  const skin = new THREE.MeshStandardMaterial({ color: 0x5a4a3a, roughness: .9 });
+  const metal = texMat('gunmetal', .5, .5, { envMapIntensity: 1 }), metal2 = texMat('gunmetal', .5, .5, { color: 0x8a8d92, envMapIntensity: 1 });
+  const poly = new THREE.MeshStandardMaterial({ color: 0x24262a, roughness: .7, metalness: .1 });
+  const tan = texMat('gear', .5, .5, { color: 0xb9a07a });
+  const glove = texMat('gear', .5, .5, { color: 0x5a5646 });
   const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); gun.add(m); return m; };
-  add(new THREE.BoxGeometry(.07, .11, .42), dark, 0, 0, -.02);                       // 机匣
-  add(new THREE.BoxGeometry(.03, .03, .08), dark2, .045, .02, .02);                   // 拉机柄
-  add(new THREE.BoxGeometry(.06, .07, .36), dark2, 0, .0, -.4);                       // 护木
-  for (let i = 0; i < 5; i++) add(new THREE.BoxGeometry(.064, .012, .03), dark, 0, .036, -.3 - i * .07);  // 导轨槽
-  add(new THREE.BoxGeometry(.03, .04, .06), tan, 0, -.055, -.52);                     // 前握把
-  add(new THREE.CylinderGeometry(.013, .013, .3, 12), dark, 0, .02, -.72, Math.PI / 2); // 枪管
-  add(new THREE.CylinderGeometry(.02, .02, .07, 12), dark, 0, .02, -.86, Math.PI / 2);  // 枪口
-  add(new THREE.BoxGeometry(.05, .2, .09), dark2, 0, -.15, -.1, .15);                   // 弹匣
-  add(new THREE.BoxGeometry(.045, .09, .06), tan, 0, -.1, .12, -.25);                   // 握把
-  add(new THREE.BoxGeometry(.06, .09, .24), tan, 0, -.01, .3);                           // 枪托
-  add(new THREE.BoxGeometry(.03, .04, .1), dark, 0, .075, -.05);                        // 瞄具座
-  // 镂空红点瞄具：四根边框 + 透明镜片 + 红点
-  add(new THREE.BoxGeometry(.06, .006, .02), dark, 0, .133, -.08); add(new THREE.BoxGeometry(.06, .006, .02), dark, 0, .097, -.08);
-  add(new THREE.BoxGeometry(.006, .042, .02), dark, -.027, .115, -.08); add(new THREE.BoxGeometry(.006, .042, .02), dark, .027, .115, -.08);
-  add(new THREE.BoxGeometry(.048, .03, .004), new THREE.MeshBasicMaterial({ color: 0x4a7a9a, transparent: true, opacity: .18, depthWrite: false }), 0, .115, -.08);
+  const B = (w, h, d) => new THREE.BoxGeometry(w, h, d), C = (r, h, s = 12) => new THREE.CylinderGeometry(r, r, h, s);
+  // 上下机匣
+  add(B(.07, .075, .42), metal, 0, .02, -.02); add(B(.068, .05, .3), metal, 0, -.04, .02);
+  add(B(.03, .02, .1), metal2, .036, .03, -.02);                                            // 抛壳窗
+  add(B(.04, .025, .09), metal, .045, .0, -.02);                                            // 抛壳挡板
+  add(B(.05, .03, .08), metal, 0, .01, .22); add(B(.02, .025, .06), poly, -.04, .01, .22);  // 拉机柄
+  add(B(.03, .02, .03), metal2, -.045, -.02, .02);                                          // 弹匣释放钮
+  // 顶部皮卡汀尼导轨
+  for (let i = 0; i < 16; i++) add(B(.068, .012, .022), metal2, 0, .064, .16 - i * .04);
+  // 护木 + M-LOK 槽
+  add(B(.062, .07, .36), metal, 0, .008, -.4);
+  for (let i = 0; i < 4; i++) { add(B(.064, .01, .05), poly, 0, .0, -.27 - i * .08); add(B(.02, .072, .05), poly, .0, .008, -.27 - i * .08); }
+  add(B(.03, .045, .07), poly, 0, -.05, -.5);                                               // 前握把
+  // 枪管 / 导气箍 / 消焰器
+  add(C(.013, .32), metal, 0, .02, -.72, Math.PI / 2); add(B(.04, .06, .04), metal, 0, .03, -.6);
+  add(C(.019, .08, 12), metal, 0, .02, -.9, Math.PI / 2); for (let i = 0; i < 4; i++) add(B(.044, .004, .05), poly, 0, .02, -.9, 0, 0, i * Math.PI / 4);
+  add(B(.012, .05, .02), metal, 0, .06, -.6);                                               // 准星座
+  // 弹匣（两段微曲）
+  add(B(.05, .13, .085), poly, 0, -.12, -.1, .1); add(B(.05, .1, .085), poly, 0, -.23, -.085, .32);
+  add(B(.03, .01, .06), tan, 0, -.27, -.07, .32);                                           // 弹匣底板
+  // 扳机护圈 / 握把 / 枪托
+  add(B(.015, .05, .04), metal, 0, -.085, .07); add(B(.015, .015, .14), metal, 0, -.1, .09); add(B(.006, .04, .006), metal, 0, -.085, .05);
+  add(B(.045, .1, .06), poly, 0, -.11, .13, -.25);
+  add(B(.04, .05, .22), metal, 0, -.005, .32); add(B(.06, .1, .12), poly, 0, -.01, .42); add(B(.065, .105, .025), tan, 0, -.01, .49);
+  add(B(.05, .025, .12), poly, 0, .055, .4);                                                // 贴腮板
+  // 红点瞄具：底座 + 镂空框 + 镜片 + 红点
+  add(B(.04, .035, .09), metal, 0, .09, -.06); add(C(.004, .03, 6), metal2, 0, .09, -.03, Math.PI / 2);
+  add(B(.06, .006, .022), metal, 0, .133, -.08); add(B(.06, .006, .022), metal, 0, .097, -.08);
+  add(B(.006, .042, .022), metal, -.027, .115, -.08); add(B(.006, .042, .022), metal, .027, .115, -.08);
+  add(B(.048, .03, .004), new THREE.MeshPhysicalMaterial({ color: 0x8fb4d8, transparent: true, opacity: .16, roughness: .05, metalness: 0, depthWrite: false }), 0, .115, -.08);
   const dot = add(new THREE.SphereGeometry(.0035, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff2a2a, toneMapped: false }), 0, .115, -.079);
   dot.name = 'reddot';
-  add(new THREE.BoxGeometry(.07, .06, .06), skin, 0, -.08, -.42);                      // 前手
-  add(new THREE.BoxGeometry(.07, .07, .07), skin, 0.01, -.13, .1);                      // 后手
+  // 激光指示器 / 战术灯
+  add(C(.012, .07, 10), metal, .045, .0, -.46, Math.PI / 2); add(C(.016, .09, 10), metal, -.045, .0, -.5, Math.PI / 2); add(C(.013, .005, 10), new THREE.MeshBasicMaterial({ color: 0xfff0d0 }), -.045, 0, -.546, Math.PI / 2);
+  // 手：护木手（手掌 + 四指 + 拇指）与握把手
+  add(B(.075, .055, .11), glove, -.005, -.07, -.44); for (let i = 0; i < 4; i++) add(B(.016, .018, .05), glove, -.03 + i * .02, -.095, -.47 - (i % 2) * .01, 0, 0, 0); add(B(.02, .02, .06), glove, .04, -.05, -.4, 0, 0, .5);
+  add(B(.07, .08, .07), glove, .005, -.14, .12, -.25); for (let i = 0; i < 3; i++) add(B(.016, .02, .045), glove, -.03, -.1 - i * .022, .09 + i * .008, -.25);
+  add(B(.08, .08, .12), tan, 0, -.1, -.33); add(B(.09, .09, .14), tan, .01, -.19, .2, -.3);   // 袖口
   gun.traverse(o => { o.castShadow = false; o.receiveShadow = false; });
 }
 const muzzle = new THREE.Object3D(); muzzle.position.set(0, .02, -.9); gun.add(muzzle);
@@ -758,25 +1167,56 @@ class Enemy {
     this.speed = rnd(2.6, 3.4) + wave * .08; this.shootT = rnd(1, 2.2); this.burst = 0; this.burstT = 0; this.losT = rnd(.3); this.los = false;
     this.strafe = 0; this.strafeT = 0; this.steer = 0; this.steerT = 0; this.wp = null; this.anim = rnd(10); this.moveAmt = 0; this.flashT = 0; this.deadT = 0; this.flashMats = [];
     this.lastSeen = V3(); this.accuracy = clamp(.42 + wave * .03, .4, .7);
-    const uni = new THREE.MeshStandardMaterial({ color: 0x4b5a3a, roughness: .9 }), pants = new THREE.MeshStandardMaterial({ color: 0x3a3a30, roughness: .9 }),
-          skin = new THREE.MeshStandardMaterial({ color: 0xc9a17a, roughness: .8 }), helm = new THREE.MeshStandardMaterial({ color: 0x2e3326, roughness: .7 }),
-          gunM = new THREE.MeshStandardMaterial({ color: 0x1c1e22, roughness: .5, metalness: .7 });
-    this.flashMats = [uni, pants, skin, helm];
-    const mk = (geo, mat, x, y, z, part) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; m.userData = { enemy: this, part }; this.group.add(m); return m; };
-    this.torso = mk(new THREE.BoxGeometry(.52, .64, .3), uni, 0, 1.18, 0, 'body');
-    mk(new THREE.BoxGeometry(.44, .3, .34), uni, 0, 1.1, 0, 'body');                      // 战术背心
-    this.head = mk(new THREE.BoxGeometry(.25, .27, .26), skin, 0, 1.66, 0, 'head');
-    mk(new THREE.BoxGeometry(.3, .14, .31), helm, 0, 1.76, 0, 'head');                     // 头盔
-    this.legL = mk(new THREE.BoxGeometry(.19, .86, .22), pants, -.14, .43, 0, 'body'); this.legL.geometry.translate(0, -.43, 0); this.legL.position.y = .86;
-    this.legR = mk(new THREE.BoxGeometry(.19, .86, .22), pants, .14, .43, 0, 'body'); this.legR.geometry.translate(0, -.43, 0); this.legR.position.y = .86;
-    this.armL = mk(new THREE.BoxGeometry(.14, .55, .16), uni, -.33, 1.42, 0, 'body'); this.armL.geometry.translate(0, -.27, 0);
-    this.armR = mk(new THREE.BoxGeometry(.14, .55, .16), uni, .33, 1.42, 0, 'body'); this.armR.geometry.translate(0, -.27, 0);
-    this.gun = mk(new THREE.BoxGeometry(.06, .1, .7), gunM, .12, 1.3, -.35, 'body');
-    const laser = new THREE.Mesh(new THREE.SphereGeometry(.018, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff2020, toneMapped: false })); laser.position.set(0, .03, -.36); this.gun.add(laser);
-    const eyes = new THREE.Mesh(new THREE.BoxGeometry(.2, .03, .01), new THREE.MeshBasicMaterial({ color: 0x5aff9a, toneMapped: false })); eyes.position.set(0, .02, -.135); this.head.add(eyes);  // 夜视镜微光
+    // —— 分段士兵模型：头盔 / 面罩 / 战术背心 / 弹袋 / 护膝 / 背包 ——
+    const camo = texMat('camo', 1, 1).clone(), gear = texMat('gear', .5, .5).clone(),
+          skin = new THREE.MeshStandardMaterial({ color: 0xb98a66, roughness: .75 }), gunM = texMat('gunmetal', .5, .5);
+    this.flashMats = [camo, gear, skin];
+    const mk = (geo, mat, x, y, z, part, parent = this.group) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; m.userData = { enemy: this, part }; parent.add(m); return m; };
+    const B = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+    // 躯干
+    this.torso = mk(B(.5, .62, .28), camo, 0, 1.2, 0, 'body');
+    mk(B(.54, .44, .36), gear, 0, 1.2, 0, 'body');                                            // 背心
+    for (const px of [-.15, 0, .15]) mk(B(.12, .15, .09), gear, px, 1.14, .21, 'body');          // 弹袋
+    mk(B(.2, .1, .05), gear, 0, 1.36, .2, 'body');                                              // 对讲机 / 名牌
+    mk(B(.52, .08, .3), gear, 0, .9, 0, 'body');                                                // 腰带
+    mk(B(.4, .46, .2), gear, 0, 1.18, -.27, 'body');                                            // 背包
+    mk(B(.3, .12, .12), camo, 0, 1.42, -.27, 'body');                                           // 背包卷
+    for (const sx of [-1, 1]) mk(B(.2, .1, .3), gear, sx * .26, 1.5, 0, 'body');                 // 肩甲
+    // 头部
+    this.head = mk(B(.24, .26, .25), skin, 0, 1.68, 0, 'head');
+    mk(B(.25, .13, .26), gear, 0, 1.62, 0, 'head');                                             // 面罩
+    mk(B(.27, .07, .27), gear, 0, 1.73, 0, 'head');                                             // 护目镜带
+    mk(B(.31, .17, .33), camo, 0, 1.82, 0, 'head');                                             // 头盔
+    mk(B(.33, .03, .1), camo, 0, 1.75, -.16, 'head');                                           // 头盔帽檐
+    mk(B(.06, .06, .08), gear, 0, 1.88, -.17, 'head');                                          // 夜视仪支架
+    const eyes = new THREE.Mesh(B(.2, .03, .01), new THREE.MeshBasicMaterial({ color: 0x5aff9a, toneMapped: false })); eyes.position.set(0, 1.73, -.14); this.group.add(eyes); // 夜视微光
+    // 腿（以髋为轴的组）
+    const leg = (sx) => {
+      const g = new THREE.Group(); g.position.set(sx * .15, .92, 0); this.group.add(g);
+      mk(B(.2, .46, .23), camo, 0, -.23, 0, 'body', g); mk(B(.18, .46, .2), camo, 0, -.66, 0, 'body', g);
+      mk(B(.19, .12, .1), gear, 0, -.47, -.1, 'body', g);                                       // 护膝
+      mk(B(.2, .14, .3), gear, 0, -.86, -.04, 'body', g);                                       // 军靴
+      mk(B(.1, .14, .12), gear, sx * .06, -.25, -.1, 'body', g);                                 // 腿袋
+      return g;
+    };
+    this.legL = leg(-1); this.legR = leg(1);
+    const arm = (sx) => {
+      const g = new THREE.Group(); g.position.set(sx * .33, 1.45, 0); this.group.add(g);
+      mk(B(.15, .3, .16), camo, 0, -.15, 0, 'body', g); mk(B(.13, .3, .14), camo, 0, -.43, 0, 'body', g); mk(B(.13, .1, .14), gear, 0, -.62, 0, 'body', g);
+      return g;
+    };
+    this.armL = arm(-1); this.armR = arm(1);
+    // 步枪
+    this.gun = new THREE.Group(); this.group.add(this.gun);
+    mk(B(.06, .09, .5), gunM, 0, 0, -.05, 'body', this.gun); mk(B(.05, .06, .3), gunM, 0, 0, -.42, 'body', this.gun);
+    mk(new THREE.CylinderGeometry(.012, .012, .3, 8), gunM, 0, .015, -.65, 'body', this.gun).rotation.x = Math.PI / 2;
+    mk(B(.045, .18, .07), gunM, 0, -.12, -.03, 'body', this.gun).rotation.x = .15; mk(B(.05, .07, .2), gear, 0, -.01, .28, 'body', this.gun); mk(B(.04, .08, .05), gear, 0, -.08, .1, 'body', this.gun);
+    mk(B(.04, .05, .08), gunM, 0, .07, -.1, 'body', this.gun);
+    const laser = new THREE.Mesh(new THREE.SphereGeometry(.015, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff2020, toneMapped: false })); laser.position.set(0, .04, -.3); this.gun.add(laser);
+    this.gun.position.set(.12, 1.3, -.35);
     this.muzzle = V3(.12, 1.3, -.75);
     scene.add(this.group); enemyMeshCache = null;
-    this.parts = this.group.children.slice();
+    this.parts = []; this.group.traverse(o => { if (o.isMesh && o.userData.enemy) this.parts.push(o); });
   }
   get pos() { return this.group.position; }
   pickWaypoint() {
