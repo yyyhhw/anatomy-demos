@@ -316,7 +316,7 @@ const csmSeen = new Set();
 function setupCSM(root) { root.traverse(o => { if (!o.isMesh) return; for (const m of [].concat(o.material)) if (m && m.isMeshStandardMaterial && !csmSeen.has(m)) { csmSeen.add(m); csm.setupMaterial(m); } }); }
 
 const TOD = [
-  { key: 'day', name: '正午', sunI: 9.5, minElev: 0, env: 1, sky: 1, exposure: .5, fogD: .0032, fogK: .85, lamps: 0, bloomT: 2.2, bloomS: .16, gunAmb: 1 },
+  { key: 'day', name: '正午', sunI: 12.5, minElev: 0, env: .85, sky: 1, exposure: .46, fogD: .0032, fogK: .85, lamps: 0, bloomT: 2.2, bloomS: .16, gunAmb: 1 },
   { key: 'dusk', name: '黄昏', sunI: 7, minElev: 13, env: 1, sky: 1, exposure: .78, fogD: .0065, fogK: .8, lamps: .8, bloomT: 1.5, bloomS: .3, gunAmb: 1, sunTint: [1, .62, .34] },
   { key: 'night', name: '夜晚', sunI: .5, minElev: 30, env: .1, sky: .1, exposure: 1.05, fogD: .012, fogK: .12, lamps: 1, bloomT: 1.0, bloomS: .42, gunAmb: 1, sunTint: [.62, .74, 1] },
 ];
@@ -497,7 +497,7 @@ function lightCone(x, y, z, r, h) { const m = new THREE.Mesh(new THREE.ConeGeome
 function setLamps(k) {
   for (const l of lamps) l.base = k;
   coneMat.uniforms.k.value = k * .09; for (const c of cones) c.visible = k > .02;
-  for (const m of bulbMats) { m.emissive.setRGB(1, .68, .36); m.emissiveIntensity = 14 * k; }
+  for (const m of bulbMats) { m.emissive.setRGB(1, .68, .36); m.emissiveIntensity = 10 * k; }
   winLitMat.color.setRGB(1 * k * 2.6, .62 * k * 2.6, .3 * k * 2.6); if (litMesh) litMesh.visible = k > .02;
 }
 let litMesh = null;
@@ -642,7 +642,7 @@ function addLamp(x, z, a, shadow, b) {
   b.cyl(.035, .035, 1.3, x + ax * .6, H - .1, z + az * .6, 0, a, Math.PI / 2, 8);
   const hx = x + ax * 1.2, hz = z + az * 1.2;
   prop('seclight', hx, H - .12, hz, a + Math.PI / 2, { solid: false });
-  const light = new THREE.PointLight(0xffb469, 0, 30, 1.8); light.position.set(hx + ax * .25, H - .55, hz + az * .25);
+  const light = new THREE.PointLight(0xffbe82, 0, 28, 2); light.position.set(hx + ax * .25, H - .55, hz + az * .25);
   if (shadow && Q.lampShadows) { light.castShadow = true; light.shadow.mapSize.set(512, 512); light.shadow.bias = -.004; }
   scene.add(light); lightCone(light.position.x, light.position.y + .05, light.position.z, 3.6, 4.6);
   lamps.push({ light, flick: rnd(100), base: 0, top: V3(x, H, z) });
@@ -707,7 +707,7 @@ const muzzleVM = new THREE.Object3D(), ejectVM = new THREE.Object3D();
 const WS = { cur: 0, ads: 0, kick: 0, sway: V3(), pos: V3(.2, -.4, -.3), swap: 0, swapTo: -1, grenades: 3, gT: 0, sunVis: 1 };
 const WPN = [
   { id: 'rifle', name: '7.62 栓动狙击步枪 · 莫辛-纳甘式', short: '步枪', mag: 5, magSize: 5, reserve: 45, dmg: 160, head: 400, auto: false, cool: 0, cycle: 0, cycleT: 1.2, reload: 0, reloadT: 2.5,
-    hip: { p: V3(.105, -.118, -.34), r: V3(.02, .07, 0) }, adsP: V3(), fov: 13, vmFov: 30, spreadHip: .038, spreadAds: .0006, recoil: .07, kick: .09, flash: 1.4 },
+    hip: { p: V3(.135, -.16, -.62), r: V3(.025, .075, 0) }, adsP: V3(), fov: 13, vmFov: 30, spreadHip: .038, spreadAds: .0006, recoil: .07, kick: .09, flash: 1.4 },
   { id: 'pistol', name: '9mm 制式手枪 · P38 式', short: '手枪', mag: 8, magSize: 8, reserve: 56, dmg: 38, head: 110, auto: false, cool: 0, coolT: .13, cycle: 0, cycleT: 0, reload: 0, reloadT: 1.5,
     hip: { p: V3(.115, -.115, -.3), r: V3(.01, .05, 0) }, adsP: V3(), fov: 52, vmFov: 46, spreadHip: .017, spreadAds: .0045, recoil: .028, kick: .05, flash: 1 },
 ];
@@ -762,9 +762,9 @@ flashlight.target.position.set(0, -.02, -4); camera.add(flashlight, flashlight.t
 
 const raycaster = new THREE.Raycaster(), sunRay = new THREE.Raycaster();
 function updateWeapons(dt) {
-  const w = cw();
-  // 切枪
+  // 切枪（先处理，保证本帧后续逻辑用的是新武器）
   if (WS.swap > 0) { const before = WS.swap; WS.swap -= dt; if (before > .22 && WS.swap <= .22) selectWeapon(WS.swapTo, true); }
+  const w = cw();
   const busy = WS.swap > 0 || w.reload > 0;
   const wantADS = mouse.right && !busy && P.alive && !P.sprint;
   WS.ads = damp(WS.ads, wantADS ? 1 : 0, w.id === 'rifle' ? 9 : 13, dt);
@@ -933,7 +933,7 @@ const losRay = new THREE.Raycaster();
 function hasLOS(a, b) { const d = b.clone().sub(a), dist = d.length(); losRay.set(a, d.normalize()); losRay.far = dist - .2; return losRay.intersectObjects(world.los, false).length === 0; }
 const enemyFlash = new THREE.PointLight(0xffb060, 0, 16, 2); scene.add(enemyFlash);
 const headGeo = new THREE.SphereGeometry(.145, 10, 8), torsoGeo = new THREE.BoxGeometry(.5, .66, .34), legGeo = new THREE.BoxGeometry(.42, .94, .32);
-const RIFLE_POSE = { p: [4, 10, 3], r: [1.45, 0, 1.75] };   // 步枪相对右手骨骼的摆放（厘米 / 弧度），调试可改
+const RIFLE_POSE = { grip: [.3, .035] };   // 握把（枪托颈部）相对步枪原点的偏移
 function initEnemyAssets() {
   const map = new Map();
   enemyRifle = G.bolt_action_rifle_7_62.scene.clone(true);
@@ -951,8 +951,9 @@ class Enemy {
     this.mixer = new THREE.AnimationMixer(model); const clip = n => this.mixer.clipAction(THREE.AnimationClip.findByName(G.soldier.animations, n));
     this.acts = { idle: clip('Idle'), walk: clip('Walk'), run: clip('Run') }; this.wt = { idle: 1, walk: 0, run: 0 };
     for (const k in this.acts) { this.acts[k].play(); this.acts[k].setEffectiveWeight(this.wt[k]); this.acts[k].time = rnd(1); }
-    const hand = model.getObjectByName('mixamorigRightHand');
-    if (hand) { const r = enemyRifle.clone(true); const h = new THREE.Group(); h.scale.setScalar(100); h.position.set(...RIFLE_POSE.p); h.rotation.set(...RIFLE_POSE.r); h.add(r); hand.add(h); this.rifle = h; }
+    // 步枪：不依赖骨骼朝向，每帧放到右手位置并让枪口指向前方 / 玩家
+    this.hand = model.getObjectByName('mixamorigRightHand');
+    { const r = enemyRifle.clone(true); r.position.set(RIFLE_POSE.grip[0], RIFLE_POSE.grip[1], 0); const h = new THREE.Group(); h.rotation.order = 'YXZ'; h.add(r); this.group.add(h); this.rifle = h; this.aimPitch = -.5; }
     this.proxies = [];
     const px = (geo, y, zz, part) => { const m = new THREE.Mesh(geo, losMat); m.position.set(0, y, zz); m.visible = false; m.userData = { enemy: this, part }; this.group.add(m); this.proxies.push(m); };
     px(headGeo, 1.66, -.02, 'head'); px(torsoGeo, 1.2, 0, 'body'); px(legGeo, .47, 0, 'body');
@@ -1019,10 +1020,19 @@ class Enemy {
     const tw = { idle: this.moved < .35 ? 1 : 0, walk: this.moved >= .35 && this.moved < 2.4 ? 1 : 0, run: this.moved >= 2.4 ? 1 : 0 };
     for (const k in this.acts) { this.wt[k] = damp(this.wt[k], tw[k], 7, dt); this.acts[k].setEffectiveWeight(this.wt[k]); }
     this.acts.walk.timeScale = clamp(this.moved / 1.5, .6, 1.5); this.acts.run.timeScale = clamp(this.moved / 3.8, .7, 1.25);
-    this.mixer.update(dt);
+    this.mixer.update(dt); this.placeRifle(dt, dist, toP);
+  }
+  placeRifle(dt, dist, toP) {
+    if (!this.hand) return;
+    this.group.updateMatrixWorld(true);
+    const hp = this.group.worldToLocal(this.hand.getWorldPosition(_v)); this.rifle.position.copy(hp);
+    // 警戒且可见时枪口抬起指向玩家，否则枪口朝前下方（低姿持枪）
+    let pitch = -.55; if (this.alert && this.los && toP) pitch = Math.atan2((P.pos.y + P.eye * .8) - (this.group.position.y + hp.y), Math.max(1, dist));
+    this.aimPitch = damp(this.aimPitch, pitch, 7, dt);
+    this.rifle.rotation.set(0, Math.PI / 2, this.aimPitch);   // 模型 +X 为枪口 → 朝向角色正面（-Z），再绕局部 Z 俯仰
   }
   fire(dist) {
-    const mz = this.rifle ? this.rifle.localToWorld(V3(.6, .04, 0)) : this.group.localToWorld(V3(.2, 1.35, -.6));
+    const mz = this.rifle.localToWorld(V3(.9, .08, 0));
     const eye = P.pos.clone().add(V3(0, P.eye, 0));
     const chance = this.accuracy * clamp(1 - dist / 85, .15, 1) * (P.crouch ? .7 : 1) * (Math.hypot(P.hvel.x, P.hvel.z) > 6 ? .75 : 1);
     const hitP = Math.random() < chance;
@@ -1030,7 +1040,7 @@ class Enemy {
     const dir = target.clone().sub(mz).normalize();
     tracer(mz, hitP ? target : mz.clone().addScaledVector(dir, 90), 0xffa050); enemyFlash.position.copy(mz); enemyFlash.intensity = 60;
     fire.spawn(mz, dir.clone().multiplyScalar(2), .07, .15, .45, 1);
-    if (hitP) damagePlayer(Math.round(rnd(14, 24)));
+    if (hitP) damagePlayer(Math.round(rnd(9, 16)));
     else { raycaster.set(mz, dir); raycaster.far = 140; const hs = raycaster.intersectObjects(world.hit, false); if (hs[0] && hs[0].face) { const n = hs[0].face.normal.clone(); if (hs[0].object.isInstancedMesh) { hs[0].object.getMatrixAt(hs[0].instanceId, _m4); n.transformDirection(_m4); } else n.transformDirection(hs[0].object.matrixWorld); if (n.dot(dir) > 0) n.negate(); impact(hs[0].point, n); } }
     sfx.shot(.4, dist, .8);
   }
@@ -1202,10 +1212,9 @@ addEventListener('resize', onResize);
 //  主循环
 // ============================================================
 const clock = new THREE.Clock(); let lastFov = 72;
-function frame() {
-  requestAnimationFrame(frame);
-  const dt = Math.min(.05, clock.getDelta()); now += dt;
-  if (!ready) return;
+const NORENDER = QS.has('norender');
+function simulate(dt) {
+  now += dt;
   if (running && !paused) {
     updatePlayer(dt); updateWeapons(dt);
     for (const e of enemies.slice()) e.update(dt);
@@ -1213,7 +1222,14 @@ function frame() {
     enemyFlash.intensity *= Math.exp(-dt * 30); heardShotT -= dt;
   }
   sparks.update(dt); debris.update(dt); blood.update(dt); casings.update(dt); smoke.update(dt); fire.update(dt); dustPuff.update(dt); updateTracers(dt); updateMotes(dt);
-  for (const l of lamps) { const f = .88 + .12 * Math.sin(now * 23 + l.flick) * Math.sin(now * 7.3 + l.flick); l.light.intensity = 260 * l.base * f; }
+  for (const l of lamps) { const f = .88 + .12 * Math.sin(now * 23 + l.flick) * Math.sin(now * 7.3 + l.flick); l.light.intensity = 150 * l.base * f; }
+}
+function frame() {
+  requestAnimationFrame(frame);
+  const dt = Math.min(.05, clock.getDelta());
+  if (!ready) return;
+  if (NORENDER) return;
+  simulate(dt);
   // 相机
   P.recoil = damp(P.recoil, 0, 7, dt); P.recoilX = damp(P.recoilX, 0, 7, dt); P.shake = Math.max(0, P.shake - dt * 2.2);
   const sh = P.shake * P.shake * .03, sp = Math.min(1, Math.hypot(P.hvel.x, P.hvel.z) / 5) * (P.onGround ? 1 : 0), scoped = cw().id === 'rifle' && WS.ads > .86;
@@ -1240,7 +1256,7 @@ function frame() {
     $('loadtxt').textContent = '正在搭建场景…'; await new Promise(r => setTimeout(r, 30));
     initEnemyAssets(); buildWorld(); initWeapons(); initComposer(); applyTOD(0);
     ready = true; $('loading').style.display = 'none'; $('start').disabled = false; $('start').textContent = '开始任务';
-    window.__fps = { P, WS, WPN, state, enemies, applyTOD, scene, renderer, camera, world, tod: () => tod, RIFLE_POSE, csm, Enemy, vmRoot, get now() { return now; } };
+    window.__fps = { P, WS, WPN, state, enemies, applyTOD, scene, renderer, camera, world, tod: () => tod, csm, Enemy, vmRoot, simulate, keys, mouse, tryFire, reload, selectWeapon, throwGrenade, grenades, get now() { return now; } };
   } catch (e) { console.error(e); $('err').style.display = 'block'; $('err').textContent = '加载失败：' + (e && e.message ? e.message : e); }
 })();
 frame();
