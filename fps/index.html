@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>暗影行动 · FPS</title>
 <style>
-  :root{
+  :root{color-scheme:dark;
     --ink:#e8e6df;--dim:rgba(232,230,223,.55);--accent:#ffb347;--red:#ff3b30;--green:#7ee081;
     --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
     --sans:"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif;
@@ -853,7 +853,7 @@ let flashOn = false;
 // ============================================================
 const P = { pos: V3(0, 0, 30), hvel: V3(), vy: 0, onGround: true, yaw: 0, pitch: 0, crouch: false, sprint: false, hp: 100, lastHit: -99, eye: 1.7, radius: .35, height: 1.8, alive: true, bob: 0, recoil: 0, recoilX: 0, shake: 0 };
 const keys = {};
-let locked = false, running = false, paused = false, now = 0;
+let locked = false, running = false, paused = false, now = 0, noLock = false;
 
 function collides(pos, radius, height) {
   const step = pos.y + .5;
@@ -1548,13 +1548,14 @@ addEventListener('keydown', e => {
   if (e.code === 'Space') e.preventDefault();
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('keydown', e => { if (e.code === 'Escape' && noLock && running && !paused) { paused = true; $('menu').classList.remove('hide'); $('start').textContent = '继续任务'; $('hint').textContent = '任务已暂停'; mouse.left = mouse.right = false; } });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; mouse.left = mouse.right = false; });
 canvas.addEventListener('mousedown', e => { if (!running || paused) return; if (e.button === 0) mouse.left = true; if (e.button === 2) mouse.right = true; });
 addEventListener('mouseup', e => { if (e.button === 0) mouse.left = false; if (e.button === 2) mouse.right = false; });
 addEventListener('contextmenu', e => e.preventDefault());
 let lockT = 0;
 addEventListener('mousemove', e => {
-  if (!locked || !running || paused || !P.alive) return;
+  if ((!locked && !noLock) || !running || paused || !P.alive) return;
   if (performance.now() - lockT < 80 || Math.abs(e.movementX) > 400 || Math.abs(e.movementY) > 400) return; // 忽略锁定瞬间的跳变
   const sens = .0021 * lerp(1, .55, G.ads);
   P.yaw -= e.movementX * sens; P.pitch = clamp(P.pitch - e.movementY * sens, -1.45, 1.45);
@@ -1562,14 +1563,16 @@ addEventListener('mousemove', e => {
 });
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === canvas; lockT = performance.now();
-  if (!locked && running && P.alive) { paused = true; $('menu').classList.remove('hide'); $('start').textContent = '继续任务'; $('hint').textContent = '任务已暂停'; mouse.left = mouse.right = false; }
+  if (!locked && running && P.alive && !noLock) { paused = true; $('menu').classList.remove('hide'); $('start').textContent = '继续任务'; $('hint').textContent = '任务已暂停'; mouse.left = mouse.right = false; }
 });
 $('start').addEventListener('click', async () => {
   if (!actx) { actx = new (window.AudioContext || window.webkitAudioContext)(); nbuf = noiseBuf(1.5); }
   if (actx.state === 'suspended') actx.resume();
   if (!running) { resetGame(); running = true; }
   paused = false; $('menu').classList.add('hide'); $('hud').classList.add('on');
-  try { await canvas.requestPointerLock({ unadjustedMovement: true }); } catch { try { canvas.requestPointerLock(); } catch { } }
+  noLock = false;
+  try { await canvas.requestPointerLock({ unadjustedMovement: true }); } catch { try { await canvas.requestPointerLock(); } catch { } }
+  setTimeout(() => { if (document.pointerLockElement !== canvas) { noLock = true; canvas.style.cursor = 'crosshair'; prompt('当前环境不支持锁定鼠标：移动鼠标即可转动视角，按 Esc 暂停'); } }, 400);
 });
 
 // ============================================================
