@@ -4,7 +4,7 @@
 https://polyhaven.com/license
 
 模型 `models/*.glb`（已缩放贴图、转 WebP、网格量化，部分做了减面）：
-bolt_action_rifle_7_62, service_pistol, stick_grenade, modular_factory_facade,
+bolt_action_rifle_7_62 (+ 低模 rifle_lod), service_pistol, stick_grenade, modular_factory_facade,
 concrete_road_barrier, concrete_road_barrier_02, old_military_crate,
 wooden_military_crate, wooden_crate_02, ammo_box, Barrel_01, Barrel_02,
 barrel_03, metal_jerrycan_green, old_tyre, utility_box_01, covered_car,

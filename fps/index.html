@@ -197,15 +197,20 @@ const damp = (a, b, l, dt) => lerp(a, b, 1 - Math.exp(-l * dt));
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const A = 'assets/';
 let savedQ = null; try { savedQ = localStorage.getItem('fpsq'); } catch { }
-const QNAME = QS.get('q') || savedQ || 'high';
-const Q = QNAME === 'low'
-  ? { name: 'low', ao: false, shadow: 1024, cascades: 2, pr: 1, lampShadows: false, bloom: true }
-  : { name: 'high', ao: true, shadow: 2048, cascades: 3, pr: Math.min(devicePixelRatio, 1.5), lampShadows: true, bloom: true };
+const TIERS = {
+  high:   { label: '高', ao: true,  shadow: 2048, cascades: 3, soft: true,  prMax: 1.25, bloom: true,  maxFar: 110 },
+  medium: { label: '中', ao: false, shadow: 2048, cascades: 2, soft: false, prMax: 1,    bloom: true,  maxFar: 80 },
+  low:    { label: '低', ao: false, shadow: 1024, cascades: 2, soft: false, prMax: .8,   bloom: false, maxFar: 60 },
+};
+const QNAME = TIERS[QS.get('q')] ? QS.get('q') : TIERS[savedQ] ? savedQ : 'medium';
+const Q = { name: QNAME, ...TIERS[QNAME] };
+let dynScale = 1;                                             // 动态分辨率系数（按帧率自动调节）
+const basePR = () => Math.min(devicePixelRatio || 1, Q.prMax);
 
 const canvas = $('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
-renderer.setPixelRatio(Q.pr); renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setPixelRatio(basePR()); renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = Q.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
@@ -220,7 +225,7 @@ const fxRoot = new THREE.Group(); fxRoot.userData.noAO = true; scene.add(fxRoot)
 const MODEL_NAMES = ['soldier', 'bolt_action_rifle_7_62', 'service_pistol', 'stick_grenade', 'modular_factory_facade', 'concrete_road_barrier', 'concrete_road_barrier_02',
   'old_military_crate', 'wooden_military_crate', 'wooden_crate_02', 'ammo_box', 'Barrel_01', 'Barrel_02', 'barrel_03', 'metal_jerrycan_green', 'old_tyre', 'utility_box_01',
   'covered_car', 'portable_generator', 'metal_trash_can', 'propane_tank', 'cement_bag', 'trashbag', 'security_light', 'water_manhole_cover', 'modular_industrial_pipes_01',
-  'exterior_aircon_unit', 'hand_truck'];
+  'exterior_aircon_unit', 'hand_truck', 'rifle_lod'];
 const TILE = { asphalt_02: 3, concrete_pavement: 1.8, concrete_wall_008: 2.71, damaged_plaster: 1.85, worn_brick_wall: 2, container_side: 1.94, corrugated_iron_02: 2.7, concrete_floor_worn_001: 3, green_metal_rust: 1, metal_plate: .5, hessian_230: .45, bitumen: 5 };
 const SKYINFO = {"day":{"sun":[0.5544,0.7417,0.3776],"sunColor":[0.973,1.0,0.924],"horizon":[0.633,0.694,0.847],"zenith":[0.837,0.915,1.184]},"dusk":{"sun":[0.8066,0.0441,0.5894],"sunColor":[1.0,0.618,0.263],"horizon":[0.482,0.419,0.492],"zenith":[0.535,0.586,0.92]},"night":{"sun":[0.785,0.2387,0.5717],"sunColor":[1.0,0.778,0.621],"horizon":[1.604,2.058,2.57],"zenith":[0.238,0.423,0.759]}};
 const FACADE_ORIGIN = {"cornice02_standard_standard_01":[-17,5,0],"cornice02_end_01":[-30.1,5.0,0],"cornice02_end_02":[-29.9,5,0],"cornice02_standard_corner_small_01":[-25,5,0],"cornice02_standard_corner_large_01":[-21,5,0],"cornice02_standard_corner_large_02":[-21,5,-2],"cornice02_standard_corner_small_02":[-25,5,-3.0],"cornice02_pier_corner_01":[-29,5,0],"cornice02_pier_corner_02":[-29,5,-0.9],"cornice02_pier_standard_01":[-28,5,0],"window_centered_medium_03":[7,12,0],"window_centered_medium_02":[7.0,8,0],"window_centered_large_02":[3,8,0],"window_centered_large_03":[3,12,0],"window_centered_medium_04":[7,16,0],"window_centered_large_04":[3,16,0],"window_tall_large_01":[-9,4,0],"window_tall_small_01":[-1,4,0],"window_centered_small_03":[11,12,0],"window_centered_small_04":[11,16,0],"window_centered_small_01":[11,4,0],"window_centered_medium_01":[7.0,4,0],"window_centered_large_01":[3,4,0],"window_centered_small_02":[11,8,0],"window_tall_large_05":[-9,20,0],"window_tall_large_010":[-13,20,0],"window_tall_large_08":[-13,12,0],"window_tall_large_03":[-9,12,0],"window_tall_large_02":[-9,8,0],"window_tall_large_04":[-9,16,0],"window_tall_large_06":[-13,4,0],"window_tall_small_05":[-1,20,0],"window_tall_small_010":[-5,20,0],"window_tall_small_03":[-1,12,0],"window_tall_small_08":[-5,12,0],"window_tall_small_02":[-1.0,8,0],"window_tall_small_04":[-1.0,16.0,0],"window_tall_small_06":[-5,4,0],"window_centered_double_03":[15,12,0],"window_centered_double_04":[15,16,0],"window_centered_double_01":[15,4,0],"window_centered_double_02":[15,8,0],"window_offset_small_06":[19,12,-2],"window_offset_small_08":[19,16,-2],"window_offset_small_02":[19,4,-2],"window_offset_small_04":[19,8,-2],"window_offset_small_05":[19,12,0],"window_offset_small_07":[19,16,0],"window_offset_small_01":[19,4,0],"window_offset_small_03":[19,8,0],"dado_standard_corner_large_01":[-21,-1,0],"dado_end_02":[-29.9,-1,0],"dado_end_01":[-30.1,-1,0],"dado_standard_standard_01":[-17,-1,0],"dado_door_centered_large_01":[19.0,-1,0],"dado_door_recessed_large_01":[11.0,-1,0],"dado_garage_door_01":[7.0,-1.0,0],"dado_garage_centered_01":[-10.0,-1.0,0],"dado_garage_door_02":[7.0,-1.0,-2],"dado_door_recessed_small_01":[15.0,-1.0,0],"dado_garage_double_01":[-0.0,-1.0,0],"dado_door_centered_small_01":[23,-1,0],"dado_standard_corner_small_01":[-25,-1,0],"dado_standard_corner_large_02":[-21,-1,-2],"dado_standard_corner_small_02":[-25,-1,-3.0],"dado_pier_corner_01":[-29,-1,0],"dado_pier_corner_02":[-29,-1,-0.9],"dado_pier_pedestal_01":[-28,-1,0],"cornice03_standard_standard_01":[-17,4,0],"cornice03_standard_corner_small_01":[-25,4,0],"cornice03_standard_corner_large_01":[-21,4,0],"cornice03_standard_corner_large_02":[-21,4,-2],"cornice03_standard_corner_small_02":[-25,4,-3.0],"base_standard_corner_large_01":[-21,-2,0],"base_end_02":[-29.9,-2,0],"base_standard_standard_01":[-17,-2,0],"base_end_01":[-30.1,-2,0],"base_standard_corner_small_01":[-25,-2,0],"base_standard_corner_large_02":[-21,-2,-2],"base_standard_corner_small_02":[-25,-2,-3.0],"cornice01_standard_standard_01":[-17,6,0],"cornice01_standard_corner_large_01":[-21,6,0],"cornice01_standard_corner_small_02":[-25,6,-3.0],"cornice01_pier_standard_01":[-28,6,0],"cornice01_pier_corner_02":[-29,6,-0.9],"cornice01_end_01":[-30.1,6.0,0],"cornice01_end_02":[-29.9,6,0],"cornice01_pier_corner_01":[-29,6,0],"cornice01_standard_corner_large_02":[-21,6,-2],"cornice01_standard_corner_small_01":[-25,6,0],"crown_standard_standard_01":[-17,7,0],"crown_end_01":[-30.1,7.0,0],"crown_end_02":[-29.9,7,0],"crown_standard_corner_small_01":[-25,7,0],"crown_standard_corner_large_01":[-21,7,0],"crown_standard_corner_large_02":[-21,7,-2],"crown_standard_corner_small_02":[-25,7,-3.0],"crown_pier_corner_01":[-29,7,0],"crown_pier_corner_02":[-29,7,-0.9],"crown_pier_pedestal_01":[-28,7,0],"wall_standard_standard_01":[-17,0,0],"wall_door_centered_large_01":[19.0,0,0],"wall_window_tall_large_05":[-9,20,0],"wall_window_centered_large_01":[3,4,0],"wall_window_centered_medium_01":[7.0,4,0],"wall_window_centered_large_02":[3,8,0],"wall_window_centered_medium_02":[7.0,8,0],"wall_window_centered_small_02":[11,8,0],"wall_window_centered_small_01":[11,4,0],"wall_door_recessed_small_01":[15.0,0,0],"wall_door_centered_small_01":[23,0,0],"wall_door_recessed_large_01":[11.0,0,0],"wall_window_centered_large_05":[3,20,0],"wall_window_centered_medium_05":[7.0,20,0],"wall_window_tall_large_06":[-13,4,0],"wall_window_tall_large_010":[-13,20,0],"wall_window_tall_large_08":[-13,12,0],"wall_window_tall_large_07":[-13,8,0],"wall_window_tall_large_01":[-9,4,0],"wall_window_tall_large_03":[-9,12,0],"wall_window_tall_large_02":[-9,8,0],"wall_window_tall_large_04":[-9,16,0],"wall_window_tall_large_09":[-13,16,0],"wall_window_tall_small_05":[-1,20,0],"wall_window_tall_small_010":[-5,20,0],"wall_window_tall_small_03":[-1,12,0],"wall_window_tall_small_08":[-5,12,0],"wall_window_tall_small_06":[-5,4,0],"wall_window_tall_small_01":[-1,4,0],"wall_window_tall_small_02":[-1.0,8,0],"wall_window_tall_small_07":[-5.0,8,0],"wall_window_tall_small_04":[-1.0,16.0,0],"wall_window_tall_small_09":[-5.0,16.0,0],"wall_door_garage_door_02":[7.0,0,-2],"wall_door_garage_door_01":[7.0,0,0],"wall_door_garage_centered_01":[-10.0,0,0],"wall_window_centered_medium_03":[7,12,0],"wall_window_centered_large_03":[3,12,0],"wall_window_centered_medium_04":[7,16,0],"wall_window_centered_large_04":[3,16,0],"wall_window_centered_medium_06":[7,24,0],"wall_window_centered_large_06":[3,24,0],"wall_window_centered_small_04":[11,16,0],"wall_window_centered_small_03":[11,12,0],"wall_window_centered_double_02":[15,8,0],"wall_window_centered_double_01":[15,4,0],"wall_window_centered_double_04":[15,16,0],"wall_window_centered_double_03":[15,12,0],"wall_window_offset_small_02":[19,4,-2],"wall_window_offset_small_04":[19,8,-2],"wall_window_offset_small_06":[19,12,-2],"wall_window_offset_small_08":[19,16,-2],"wall_window_offset_small_03":[19,8,0],"wall_window_offset_small_01":[19,4,0],"wall_window_offset_small_07":[19,16,0],"wall_window_offset_small_05":[19,12,0],"wall_door_centered_small_02":[23,0,-2],"wall_door_garage_double_01":[-0.0,0,0],"wall_door_window_small_01":[23,4,0],"wall_door_window_small_03":[23,8,0],"wall_door_window_small_05":[23,12,0],"wall_door_window_small_07":[23,16,0],"wall_door_window_small_04":[23,8,-2],"wall_door_window_small_06":[23,12,-2],"wall_door_window_small_08":[23,16,-2],"wall_door_window_small_02":[23,4,-2],"wall_door_recessed_small_02":[15.0,0,-2],"wall_standard_corner_large_01":[-21,0,0],"wall_standard_corner_large_02":[-21,0,-2],"wall_standard_corner_small_01":[-25,0,0],"wall_standard_corner_small_02":[-25,0,-3.0],"wall_pier_corner_01":[-29,0,0],"wall_pier_corner_02":[-29,0,-0.9],"wall_pier_standard_01":[-28,0,0],"door_recessed_large_01":[11.0,0,0],"door_centered_large_01":[19.0,0,0],"door_recessed_small_01":[15.0,0,0],"door_centered_small_01":[23,0,0],"door_centered_small_02":[23,0,-2],"door_garage_door_02":[7.0,0,-2],"door_garage_door_01":[7.0,0,0],"door_garage_centered_01":[-10.0,0,0],"door_garage_double_01":[-0.0,0,0],"door_window_small_01":[23,4,0],"door_window_small_03":[23,8,0],"door_window_small_05":[23,12,0],"door_window_small_07":[23,16,0],"door_recessed_small_02":[15.0,0,-2],"door_window_small_02":[23,4,-2],"door_window_small_04":[23,8,-2],"door_window_small_06":[23,12,-2],"door_window_small_08":[23,16,-2]};
@@ -316,7 +321,7 @@ const pmrem = new THREE.PMREMGenerator(renderer);
 const envScene = new THREE.Scene(); const envDome = new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), skyMat); envScene.add(envDome);
 let envRT = null;
 const sunDir = V3(.5, .7, .4).normalize();
-const csm = new CSM({ maxFar: 120, cascades: Q.cascades, mode: 'practical', parent: scene, shadowMapSize: Q.shadow, lightDirection: sunDir.clone().negate(), camera, lightIntensity: 10, lightNear: 1, lightFar: 500, lightMargin: 80, shadowBias: -0.00015 });
+const csm = new CSM({ maxFar: Q.maxFar, cascades: Q.cascades, mode: 'practical', parent: scene, shadowMapSize: Q.shadow, lightDirection: sunDir.clone().negate(), camera, lightIntensity: 10, lightNear: 1, lightFar: 500, lightMargin: 80, shadowBias: -0.00015 });
 csm.fade = true;
 for (const l of csm.lights) { l.shadow.normalBias = .04; }
 const csmSeen = new Set();
@@ -359,13 +364,15 @@ function solid(x, y, z, w, h, d, los = true) {
   world.boxes.push({ min: V3(x - w / 2, y, z - d / 2), max: V3(x + w / 2, y + h, z + d / 2) });
   if (los && h > .9) { const m = new THREE.Mesh(losGeo, losMat); m.position.set(x, y + h / 2, z); m.scale.set(w, h, d); m.updateMatrixWorld(); world.los.push(m); }
 }
-const batches = new Map();     // material → Batch
-const bat = mat => { if (!batches.has(mat)) batches.set(mat, new Batch()); return batches.get(mat); };
-// 轴对齐盒体（y 为底面高度），贴图按米平铺
-function box(mat, x, y, z, w, h, d, { solid: s = true, ry = 0 } = {}) { bat(mat).boxM(w, h, d, x, y + h / 2, z, ry); if (s) solid(x, y, z, w, h, d); }
+// 静态几何按「材质 × 象限」合批：既减少 draw call，又能被视锥剔除
+const batches = new Map();     // material → [Batch × 4]
+const cellOf = (x, z) => (x > 0 ? 1 : 0) + (z > 0 ? 2 : 0);
+const bat = (mat, x = 0, z = 0) => { if (!batches.has(mat)) batches.set(mat, [null, null, null, null]); const a = batches.get(mat), c = cellOf(x, z); return a[c] || (a[c] = new Batch()); };
+// 轴对齐盒体（y 为底面高度），贴图按米平铺；跨越多个象限的大盒体归入 0 号格
+function box(mat, x, y, z, w, h, d, { solid: s = true, ry = 0 } = {}) { const big = Math.max(w, d) > 30; bat(mat, big ? -1 : x, big ? -1 : z).boxM(w, h, d, x, y + h / 2, z, ry); if (s) solid(x, y, z, w, h, d); }
 
 // —— 实例化道具 ——
-const PROTO = {}, placements = new Map();
+const PROTO = {}, placements = new Map(), NO_SHADOW = new Set(['ammo', 'jerry', 'manhole', 'bag', 'pipe', 'pipeS', 'seclight']);
 function defProto(key, model, pred = null, anchor = 'base') {
   const root = G[model].scene; root.updateMatrixWorld(true);
   const parts = [], bb = new THREE.Box3();
@@ -382,12 +389,12 @@ function defProto(key, model, pred = null, anchor = 'base') {
   const T = new THREE.Matrix4().makeTranslation(off.x, off.y, off.z);
   for (const p of parts) p.m.premultiply(T);
   bb.translate(off);
-  PROTO[key] = { parts, bb, size: bb.getSize(V3()) }; placements.set(key, []);
+  PROTO[key] = { parts, bb, size: bb.getSize(V3()) }; placements.set(key, [[], [], [], []]);
 }
 const _c8 = [...Array(8)].map(() => V3());
 function prop(key, x, y, z, ry = 0, { s = 1, solid: sol = true, rx = 0, rz = 0, los = true } = {}) {
   const P = PROTO[key]; const m = new THREE.Matrix4().compose(V3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz, 'YXZ')), V3(s, s, s));
-  placements.get(key).push(m);
+  placements.get(key)[cellOf(x, z)].push(m);
   if (sol) {
     const b = P.bb, wb = new THREE.Box3(); let i = 0;
     for (const X of [b.min.x, b.max.x]) for (const Y of [b.min.y, b.max.y]) for (const Z of [b.min.z, b.max.z]) wb.expandByPoint(_c8[i++].set(X, Y, Z).applyMatrix4(m));
@@ -397,12 +404,12 @@ function prop(key, x, y, z, ry = 0, { s = 1, solid: sol = true, rx = 0, rz = 0, 
   return m;
 }
 function buildInstances() {
-  for (const [key, list] of placements) {
+  for (const [key, cells] of placements) for (const list of cells) {
     if (!list.length) continue;
     for (const part of PROTO[key].parts) {
       const im = new THREE.InstancedMesh(part.geo, part.mat, list.length);
       list.forEach((m, i) => im.setMatrixAt(i, _m4.multiplyMatrices(m, part.m)));
-      im.instanceMatrix.needsUpdate = true; im.castShadow = im.receiveShadow = true; im.computeBoundingSphere(); im.computeBoundingBox();
+      im.instanceMatrix.needsUpdate = true; im.castShadow = !NO_SHADOW.has(key); im.receiveShadow = true; im.computeBoundingSphere(); im.computeBoundingBox();
       scene.add(im); world.hit.push(im);
     }
   }
@@ -459,9 +466,9 @@ function building({ x, z, nx, nz, floors, tint = null, doors = {}, garages = {},
     }
     for (let i = 0; i < f.n; i++) { const o = f.org(i); o.y = H; place('crown_standard_standard_01', new THREE.Matrix4().compose(o, new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), f.ry), V3(1, 1, 1))); }
   });
-  for (const [mat, b] of local) { const m = b.build(mat); m.castShadow = m.receiveShadow = true; scene.add(m); world.hit.push(m); }
+  for (const [mat, b] of local) { const m = b.build(mat); m.castShadow = false; m.receiveShadow = true; scene.add(m); world.hit.push(m); }   // 阴影由室内盒体代投，省掉高模墙面的阴影通道
   // 室内暗盒 / 屋面 / 女儿墙
-  bat(interiorMat).box(w - .5, H - .05, d - .5, x, H / 2, z);
+  bat(interiorMat, x, z).box(w - .52, H - .05, d - .52, x, H / 2, z);
   box(pbr('bitumen'), x, H, z, w - .1, .12, d - .1, { solid: false });
   const pc = pbr('concrete_wall_008');
   box(pc, x, H, z - d / 2 + .16, w, .55, .3, { solid: false }); box(pc, x, H, z + d / 2 - .16, w, .55, .3, { solid: false });
@@ -488,9 +495,13 @@ function signBoard([face, l1, l2], x, z, w, d, H) {
 // —— 贴花 ——
 function decalTex(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; }
 const speck = (g, w, h, n, a) => { for (let i = 0; i < n; i++) { g.clearRect(rnd(w), rnd(h), rnd(1, 5), rnd(1, 4)); } };
+const decalBatches = new Map();   // 贴花按贴图合批
 function decal(tex, x, z, w, h, rot = 0, y = .012, opacity = .8) {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, transparent: true, opacity, roughness: .85, polygonOffset: true, polygonOffsetFactor: -2, depthWrite: false }));
-  m.rotation.set(-Math.PI / 2, 0, rot); m.position.set(x, y, z); m.receiveShadow = true; scene.add(m); return m;
+  if (!decalBatches.has(tex)) decalBatches.set(tex, { b: new Batch(), opacity });
+  decalBatches.get(tex).b.add(new THREE.PlaneGeometry(w, h), x, y, z, -Math.PI / 2, 0, rot);
+}
+function buildDecals() {
+  for (const [tex, { b, opacity }] of decalBatches) { const m = b.build(new THREE.MeshStandardMaterial({ map: tex, transparent: true, opacity, roughness: .85, polygonOffset: true, polygonOffsetFactor: -2, depthWrite: false })); m.receiveShadow = true; m.userData.noAO = true; scene.add(m); }
 }
 
 // —— 灯具 ——
@@ -502,7 +513,7 @@ const coneMat = new THREE.ShaderMaterial({
 });
 function lightCone(x, y, z, r, h) { const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 24, 1, true), coneMat); m.position.set(x, y - h / 2, z); fxRoot.add(m); cones.push(m); return m; }
 function setLamps(k) {
-  for (const l of lamps) l.base = k;
+  for (const l of lamps) { l.base = k; if (l.light) l.light.visible = k > .02; }
   coneMat.uniforms.k.value = k * .09; for (const c of cones) c.visible = k > .02;
   for (const m of bulbMats) { m.emissive.setRGB(1, .68, .36); m.emissiveIntensity = 10 * k; }
   winLitMat.color.setRGB(1 * k * 2.6, .62 * k * 2.6, .3 * k * 2.6); if (litMesh) litMesh.visible = k > .02;
@@ -568,8 +579,8 @@ function buildWorld() {
   for (const [x, y, z, ry] of [[-18, 2.75, -3.97, 0], [18.5, 2.75, -10.47, 0], [-1.5, 2.75, -33.47, 0], [24, 2.75, 22.53, 0], [-19.47, 2.75, 22.5, Math.PI / 2], [13.97, 2.9, -19.5, -Math.PI / 2]]) { prop('seclight', x, y, z, ry, { solid: false }); doorLights.push(V3(x, y - .3, z).add(V3(Math.sin(ry) * .3, 0, Math.cos(ry) * .3))); }
 
   // —— 集装箱 ——
-  const cdet = bat(darkMetal);
   function container(x, z, alongZ, rgb, y = 0) {
+    const cdet = bat(darkMetal, x, z);
     const L = 6.06, H = 2.59, Wd = 2.44, w = alongZ ? Wd : L, d = alongZ ? L : Wd;
     box(pbr('container_side', { rgb }), x, y, z, w, H, d);
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) for (const yy of [.09, H - .09]) cdet.box(.19, .18, .19, x + sx * (w / 2 - .06), y + yy, z + sz * (d / 2 - .06));
@@ -586,7 +597,7 @@ function buildWorld() {
   row('barrier', -6, -8.4, 3, false, 1.6); row('barrier2', -10.6, 1, 3, true, 1.62); row('barrier', 28, 2, 3, false, 1.6); row('barrier2', 0, 24, 3, true, 1.62); row('barrier', -14, -26, 3, true, 1.6);
   prop('barrier', 5.2, 0, -14.5, .5); prop('barrier2', -22, 0, 8, 1.1);
   function sandbags(x, z, len, alongZ, rows = 3) {
-    const b = bat(hess), bag = new THREE.CapsuleGeometry(.17, .42, 5, 12); const per = Math.floor(len / .62);
+    const b = bat(hess, x, z), bag = new THREE.CapsuleGeometry(.17, .42, 3, 8); const per = Math.floor(len / .62);
     for (let r = 0; r < rows; r++) for (let i = 0; i < per - (r % 2); i++) {
       const t = -len / 2 + .31 + i * .62 + (r % 2) * .31, y = .14 + r * .27, px = alongZ ? x : x + t, pz = alongZ ? z + t : z;
       b.add(bag, px + rnd(-.03, .03), y, pz + rnd(-.03, .03), alongZ ? Math.PI / 2 + rnd(-.1, .1) : rnd(-.1, .1), 0, alongZ ? 0 : Math.PI / 2 + rnd(-.1, .1), alongZ ? 1 : .8, 1, alongZ ? .8 : 1, 1.1, .8);
@@ -631,27 +642,28 @@ function buildWorld() {
     box(corr, tx, 8.8, tz, 4.4, .06, 4.4, { solid: false });
   }
   // —— 路灯（钢管杆 + 工业灯头 + 光锥）——
-  for (const [x, z, a, sh] of [[-12.8, 12.8, 0, true], [13.1, -8.4, Math.PI, true], [-28.4, -18, Math.PI / 2, false], [30, 26, -Math.PI / 2, false], [0, -23, 0, false], [-4, 40, 0, false], [38, -4, Math.PI, false]]) addLamp(x, z, a, sh, bat(darkMetal));
+  for (const [x, z, a, real] of [[-12.8, 12.8, 0, true], [13.1, -8.4, Math.PI, true], [-28.4, -18, Math.PI / 2, false], [30, 26, -Math.PI / 2, true], [0, -23, 0, true], [-4, 40, 0, false], [38, -4, Math.PI, false]]) addLamp(x, z, a, real, bat(darkMetal, x, z));
   { const pts = []; const wire = (a, b, sag = .9) => { for (let i = 0; i <= 14; i++) { const t = i / 14, p = a.clone().lerp(b, t); p.y -= Math.sin(t * Math.PI) * sag; pts.push(p); if (i && i < 14) pts.push(p.clone()); } };
     wire(lamps[0].top, lamps[1].top); wire(lamps[1].top, lamps[4].top); wire(lamps[0].top, lamps[2].top, 1.4); wire(lamps[3].top, V3(AR - .5, 5.6, 12)); wire(lamps[6].top, lamps[1].top, 1.2);
     const l = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x050505 })); scene.add(l); }
 
   // —— 生成最终网格 ——
-  for (const [mat, b] of batches) { const m = b.build(mat); m.castShadow = m.receiveShadow = true; scene.add(m); if (mat !== wireMat) world.hit.push(m); }
-  buildInstances();
+  for (const [mat, cells] of batches) for (const b of cells) { if (!b) continue; const m = b.build(mat); m.castShadow = mat !== wireMat; m.receiveShadow = true; scene.add(m); if (mat !== wireMat) world.hit.push(m); }
+  buildInstances(); buildDecals();
   litMesh = litPlanes.build(winLitMat); scene.add(litMesh);
   setupCSM(scene);
 }
 const doorLights = [];
-function addLamp(x, z, a, shadow, b) {
+function addLamp(x, z, a, real, b) {
   const H = 5.2, ax = Math.cos(a), az = -Math.sin(a);
   b.cyl(.06, .085, H, x, H / 2, z, 0, 0, 0, 12); b.cyl(.13, .16, .3, x, .15, z, 0, 0, 0, 12); solid(x, 0, z, .24, H, .24, false);
   b.cyl(.035, .035, 1.3, x + ax * .6, H - .1, z + az * .6, 0, a, Math.PI / 2, 8);
   const hx = x + ax * 1.2, hz = z + az * 1.2;
   prop('seclight', hx, H - .12, hz, a + Math.PI / 2, { solid: false });
-  const light = new THREE.PointLight(0xffbe82, 0, 28, 2); light.position.set(hx + ax * .25, H - .55, hz + az * .25);
-  if (shadow && Q.lampShadows) { light.castShadow = true; light.shadow.mapSize.set(512, 512); light.shadow.bias = -.004; }
-  scene.add(light); lightCone(light.position.x, light.position.y + .05, light.position.z, 3.6, 4.6);
+  // 只有部分路灯带真实点光源（无阴影），其余仅有发光灯泡与光锥，控制逐像素光照开销
+  const lp = V3(hx + ax * .25, H - .55, hz + az * .25); let light = null;
+  if (real) { light = new THREE.PointLight(0xffbe82, 0, 28, 2); light.position.copy(lp); light.visible = false; scene.add(light); }
+  lightCone(lp.x, lp.y + .05, lp.z, 3.6, 4.6);
   lamps.push({ light, flick: rnd(100), base: 0, top: V3(x, H, z) });
 }
 
@@ -761,11 +773,11 @@ const flashTex = (() => { const c = document.createElement('canvas'); c.width = 
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
 const flashMesh = new THREE.Mesh(new THREE.PlaneGeometry(.3, .3), new THREE.MeshBasicMaterial({ map: flashTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, color: new THREE.Color(6, 4.5, 2.5) }));
 flashMesh.visible = false; flashMesh.rotation.y = -Math.PI / 2; muzzleVM.add(flashMesh);
-const muzzleLight = new THREE.PointLight(0xffb060, 0, 20, 2); muzzleLight.castShadow = Q.lampShadows; muzzleLight.shadow.mapSize.set(512, 512); muzzleLight.shadow.bias = -.004; muzzleLight.visible = false; scene.add(muzzleLight);
-const muzzleLightVM = new THREE.PointLight(0xffb060, 0, 2.5, 2); muzzleLightVM.visible = false; muzzleVM.add(muzzleLightVM);
+const muzzleLight = new THREE.PointLight(0xffb060, 0, 20, 2); scene.add(muzzleLight);   // 常驻且无阴影：灯光数量恒定，开枪时不会触发着色器重编译
+const muzzleLightVM = new THREE.PointLight(0xffb060, 0, 2.5, 2); muzzleVM.add(muzzleLightVM);
 let flashT = 0;
 const flashlight = new THREE.SpotLight(0xfff1dc, 0, 75, .34, .6, 1.3); flashlight.position.set(.16, -.14, .05); flashlight.castShadow = true; flashlight.shadow.mapSize.set(1024, 1024); flashlight.shadow.bias = -.0015; flashlight.shadow.camera.near = .2;
-flashlight.target.position.set(0, -.02, -4); camera.add(flashlight, flashlight.target); let flashOn = false;
+flashlight.target.position.set(0, -.02, -4); flashlight.visible = false; camera.add(flashlight, flashlight.target); let flashOn = false;
 
 const raycaster = new THREE.Raycaster(), sunRay = new THREE.Raycaster();
 function updateWeapons(dt) {
@@ -805,7 +817,7 @@ function updateWeapons(dt) {
   w.cool -= dt;
   if (w.reload > 0) { w.reload -= dt; $('reloadbar').firstElementChild.style.width = Math.min(100, (1 - w.reload / w.reloadT) * 100) + '%';
     if (w.reload <= 0) { const need = w.magSize - w.mag, take = Math.min(need, w.reserve); w.mag += take; w.reserve -= take; $('reloadbar').style.display = 'none'; } }
-  if (flashT > 0) { flashT -= dt; if (flashT <= 0) { flashMesh.visible = false; muzzleLight.visible = false; muzzleLightVM.visible = false; } }
+  if (flashT > 0) { flashT -= dt; if (flashT <= 0) flashMesh.visible = false; }
   muzzleLight.intensity *= Math.exp(-dt * 35); muzzleLightVM.intensity = muzzleLight.intensity * .06;
   WS.gT -= dt;
   // 枪身受光：玩家处于阴影中时压暗太阳光
@@ -838,7 +850,7 @@ function shoot() {
   } else tracer(mz, origin.clone().addScaledVector(dir, 250), 0xfff1b0);
   P.recoil += w.recoil * (1 - WS.ads * .3); P.recoilX += rnd(-.012, .012) * (w.id === 'rifle' ? 1.5 : 1); WS.kick += w.kick; WS.sway.x += rnd(-.004, .004); P.shake = Math.min(1, P.shake + (w.id === 'rifle' ? .3 : .08));
   flashMesh.visible = true; flashMesh.rotation.x = rnd(Math.PI * 2); flashMesh.scale.setScalar(rnd(.8, 1.3) * w.flash); flashT = .05;
-  muzzleLight.visible = true; muzzleLight.intensity = rnd(70, 110) * w.flash; muzzleLight.position.copy(mz); muzzleLightVM.visible = true;
+  muzzleLight.intensity = rnd(70, 110) * w.flash; muzzleLight.position.copy(mz);
   if (w.id === 'pistol') { w.slide.position.x = w.slideX - .028; casing(); }
   sfx.shot(w.id === 'rifle' ? 1 : .7, 0, w.id === 'rifle' ? .75 : 1.25);
   if (w.mag === 0 && w.reserve > 0) prompt('按 R 装弹');
@@ -943,7 +955,7 @@ const headGeo = new THREE.SphereGeometry(.145, 10, 8), torsoGeo = new THREE.BoxG
 const RIFLE_POSE = { grip: [.3, .035] };   // 握把（枪托颈部）相对步枪原点的偏移
 function initEnemyAssets() {
   const map = new Map();
-  enemyRifle = G.bolt_action_rifle_7_62.scene.clone(true);
+  enemyRifle = G.rifle_lod.scene;   // 敌人用减面、小贴图的低模步枪
   enemyRifle.traverse(o => { if (o.isMesh) { const fix = m => { if (!map.has(m)) map.set(m, m.clone()); return map.get(m); }; o.material = Array.isArray(o.material) ? o.material.map(fix) : fix(o.material); o.castShadow = true; } if (o.name.includes('bullet')) o.visible = false; });
   setupCSM(enemyRifle); setupCSM(G.soldier.scene); setupCSM(G.stick_grenade.scene);
   G.soldier.scene.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; o.frustumCulled = false; } });
@@ -1066,7 +1078,7 @@ function startWave() {
 function spawnEnemy() { const c = spawnPoints.filter(([x, z]) => Math.hypot(x - P.pos.x, z - P.pos.z) > 26); const [x, z] = c[Math.floor(rnd(c.length))] || spawnPoints[0]; enemies.push(new Enemy(x + rnd(-1.5, 1.5), z + rnd(-1.5, 1.5), state.wave)); }
 function updateWaves(dt) {
   const alive = enemies.filter(e => e.alive).length;
-  if (state.toSpawn > 0 && alive < Math.min(9, 4 + state.wave)) { state.spawnT -= dt; if (state.spawnT <= 0) { state.spawnT = rnd(.6, 1.6); state.toSpawn--; spawnEnemy(); } }
+  if (state.toSpawn > 0 && alive < Math.min(7, 3 + state.wave)) { state.spawnT -= dt; if (state.spawnT <= 0) { state.spawnT = rnd(.6, 1.6); state.toSpawn--; spawnEnemy(); } }
   if (state.toSpawn === 0 && alive === 0 && !state.waveClear) { state.waveClear = true; state.clearT = 4.5; banner(`第 ${state.wave} 波 已清除`, '补给已送达 · 弹药补充'); sfx.clear(); }
   if (state.waveClear) { state.clearT -= dt; if (state.clearT <= 0) startWave(); }
   $('enemies').textContent = `敌军 ${alive + state.toSpawn}`;
@@ -1141,7 +1153,7 @@ addEventListener('keydown', e => {
   if (e.code === 'Escape' && noLock && running && !paused) pauseGame();
   if (!running || paused) return;
   if (e.code === 'KeyR') reload(); if (e.code === 'KeyC') P.crouch = !P.crouch;
-  if (e.code === 'KeyF') { flashOn = !flashOn; flashlight.intensity = flashOn ? 320 : 0; }
+  if (e.code === 'KeyF') { flashOn = !flashOn; flashlight.intensity = flashOn ? 320 : 0; flashlight.visible = flashOn; }
   if (e.code === 'KeyT') switchTOD(); if (e.code === 'KeyG') throwGrenade();
   if (e.code === 'Digit1') selectWeapon(0); if (e.code === 'Digit2') selectWeapon(1); if (e.code === 'KeyQ') selectWeapon(1 - WS.cur);
   if (e.code === 'Space') e.preventDefault();
@@ -1170,8 +1182,8 @@ $('start').addEventListener('click', async () => {
   try { await canvas.requestPointerLock({ unadjustedMovement: true }); } catch { try { await canvas.requestPointerLock(); } catch { } }
   setTimeout(() => { if (document.pointerLockElement !== canvas) { noLock = true; canvas.style.cursor = 'crosshair'; prompt('当前环境不支持锁定鼠标：直接移动鼠标转动视角，Esc 暂停'); } }, 400);
 });
-$('quality').addEventListener('click', () => { const next = Q.name === 'high' ? 'low' : 'high'; try { localStorage.setItem('fpsq', next); } catch { } const u = new URL(location.href); u.searchParams.set('q', next); location.href = u.toString(); });
-$('quality').textContent = '画质：' + (Q.name === 'high' ? '高' : '低');
+$('quality').addEventListener('click', () => { const next = { high: 'medium', medium: 'low', low: 'high' }[Q.name]; try { localStorage.setItem('fpsq', next); } catch { } const u = new URL(location.href); u.searchParams.set('q', next); location.href = u.toString(); });
+$('quality').textContent = '画质：' + Q.label;
 let fadeBusy = false;
 function switchTOD() { if (fadeBusy) return; fadeBusy = true; $('fade').style.opacity = 1; setTimeout(() => { applyTOD((todIndex + 1) % TOD.length); if (tod.key === 'night' && !flashOn) prompt('按 F 打开战术手电'); $('fade').style.opacity = 0; setTimeout(() => { fadeBusy = false; }, 450); }, 420); }
 
@@ -1202,7 +1214,7 @@ function initComposer() {
     gtao.blendIntensity = 1; composer.addPass(gtao);
   }
   const gp = new RenderPass(gunScene, gunCam); gp.clear = false; gp.clearDepth = true; composer.addPass(gp);
-  bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), .2, .75, 2); composer.addPass(bloom);
+  if (Q.bloom) { bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), .2, .75, 2); const bs = bloom.setSize.bind(bloom); bloom.setSize = (w, h) => bs(Math.max(2, w >> 1), Math.max(2, h >> 1)); composer.addPass(bloom); }   // 泛光在半分辨率上计算
   composer.addPass(new OutputPass());
   fxaa = new ShaderPass(FXAAShader); composer.addPass(fxaa);
   grade = new ShaderPass(GradeShader); composer.addPass(grade);
@@ -1220,6 +1232,14 @@ addEventListener('resize', onResize);
 // ============================================================
 const clock = new THREE.Clock(); let lastFov = 72;
 const NORENDER = QS.has('norender');
+// 动态分辨率：帧率低于 42 降低渲染分辨率，回到 57 以上再逐步恢复
+let asAcc = 0, asN = 0, asCool = 2;
+function autoScale(raw) {
+  asAcc += raw; asN++; if (asAcc < 1) return;
+  const fps = asN / asAcc; asAcc = 0; asN = 0; if (asCool > 0) { asCool--; return; }
+  let s = dynScale; if (fps < 42) s = Math.max(.5, dynScale * (fps < 26 ? .72 : .86)); else if (fps > 57 && dynScale < 1) s = Math.min(1, dynScale * 1.1);
+  if (Math.abs(s - dynScale) > .02) { dynScale = s; renderer.setPixelRatio(basePR() * dynScale); onResize(); asCool = 2; }
+}
 function simulate(dt) {
   now += dt;
   if (running && !paused) {
@@ -1229,13 +1249,14 @@ function simulate(dt) {
     enemyFlash.intensity *= Math.exp(-dt * 30); heardShotT -= dt;
   }
   sparks.update(dt); debris.update(dt); blood.update(dt); casings.update(dt); smoke.update(dt); fire.update(dt); dustPuff.update(dt); updateTracers(dt); updateMotes(dt);
-  for (const l of lamps) { const f = .88 + .12 * Math.sin(now * 23 + l.flick) * Math.sin(now * 7.3 + l.flick); l.light.intensity = 150 * l.base * f; }
+  for (const l of lamps) if (l.light) { const f = .88 + .12 * Math.sin(now * 23 + l.flick) * Math.sin(now * 7.3 + l.flick); l.light.intensity = 150 * l.base * f; }
 }
 function frame() {
   requestAnimationFrame(frame);
-  const dt = Math.min(.05, clock.getDelta());
+  const raw = clock.getDelta(), dt = Math.min(.05, raw);
   if (!ready) return;
   if (NORENDER) return;
+  if (running && !paused && !document.hidden) autoScale(raw);
   simulate(dt);
   // 相机
   P.recoil = damp(P.recoil, 0, 7, dt); P.recoilX = damp(P.recoilX, 0, 7, dt); P.shake = Math.max(0, P.shake - dt * 2.2);
@@ -1262,8 +1283,11 @@ function frame() {
     await loadAssets();
     $('loadtxt').textContent = '正在搭建场景…'; await new Promise(r => setTimeout(r, 30));
     initEnemyAssets(); buildWorld(); initWeapons(); initComposer(); applyTOD(0);
+    // 预编译着色器，避免开局与首次开枪时卡顿
+    $('loadtxt').textContent = '正在编译着色器…';
+    try { renderer.setRenderTarget(composer.readBuffer); await renderer.compileAsync(scene, camera); await renderer.compileAsync(gunScene, gunCam); } catch (e) { console.warn('precompile skipped', e); } finally { renderer.setRenderTarget(null); }
     ready = true; $('loading').style.display = 'none'; $('start').disabled = false; $('start').textContent = '开始任务';
-    window.__fps = { P, WS, WPN, state, enemies, applyTOD, scene, renderer, camera, world, tod: () => tod, csm, Enemy, vmRoot, simulate, keys, mouse, tryFire, reload, selectWeapon, throwGrenade, grenades, get now() { return now; } };
+    window.__fps = { Q, get dynScale() { return dynScale; }, P, WS, WPN, state, enemies, applyTOD, scene, renderer, camera, world, tod: () => tod, csm, Enemy, vmRoot, simulate, keys, mouse, tryFire, reload, selectWeapon, throwGrenade, grenades, get now() { return now; } };
   } catch (e) { console.error(e); $('err').style.display = 'block'; $('err').textContent = '加载失败：' + (e && e.message ? e.message : e); }
 })();
 frame();
