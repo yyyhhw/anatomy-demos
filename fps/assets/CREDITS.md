@@ -9,9 +9,8 @@ concrete_road_barrier, concrete_road_barrier_02, old_military_crate,
 wooden_military_crate, wooden_crate_02, ammo_box, Barrel_01, Barrel_02,
 barrel_03, metal_jerrycan_green, old_tyre, utility_box_01, covered_car,
 portable_generator, metal_trash_can, propane_tank, cement_bag, trashbag,
-security_light, water_manhole_cover, modular_fire_escape,
-modular_industrial_pipes_01, exterior_aircon_unit, hand_truck,
-security_camera_01
+security_light, water_manhole_cover,
+modular_industrial_pipes_01, exterior_aircon_unit, hand_truck
 
 PBR 贴图 `tex/*`：
 asphalt_02, concrete_pavement, concrete_wall_008, damaged_plaster,
