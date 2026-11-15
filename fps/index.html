@@ -486,8 +486,11 @@ class Batch {
   constructor() { this.pos = []; this.nor = []; this.uv = []; this.idx = []; this.n = 0; }
   add(geo, x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) {
     const m = new THREE.Matrix4().compose(V3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), V3(sx, sy, sz));
-    const g = geo.index ? geo.clone() : geo.toNonIndexed(); g.applyMatrix4(m);
-    const p = g.attributes.position.array, nn = g.attributes.normal.array, u = g.attributes.uv.array;
+    return this.addGeo(geo.clone().applyMatrix4(m));
+  }
+  addMesh(mesh) { mesh.updateMatrix(); return this.addGeo(mesh.geometry.clone().applyMatrix4(mesh.matrix)); }
+  addGeo(g) {
+    const p = g.attributes.position.array, nn = g.attributes.normal.array, u = g.attributes.uv ? g.attributes.uv.array : new Float32Array(p.length / 3 * 2);
     for (let i = 0; i < p.length; i++) { this.pos.push(p[i]); this.nor.push(nn[i]); }
     for (let i = 0; i < u.length; i++) this.uv.push(u[i]);
     if (g.index) { const ii = g.index.array; for (let i = 0; i < ii.length; i++) this.idx.push(ii[i] + this.n); }
@@ -495,12 +498,15 @@ class Batch {
     this.n += p.length / 3; return this;
   }
   box(w, h, d, x, y, z, rx, ry, rz) { return this.add(new THREE.BoxGeometry(w, h, d), x, y, z, rx, ry, rz); }
-  mesh(mat, { shadow = true, hit = false, receive = true } = {}) {
-    if (!this.n) return null;
+  build(mat) {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nor, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
     g.setIndex(this.idx); g.computeBoundingSphere(); g.computeBoundingBox();
-    const m = new THREE.Mesh(g, mat); m.castShadow = shadow; m.receiveShadow = receive; scene.add(m); if (hit) world.meshes.push(m); return m;
+    return new THREE.Mesh(g, mat);
+  }
+  mesh(mat, { shadow = true, hit = false, receive = true } = {}) {
+    if (!this.n) return null;
+    const m = this.build(mat); m.castShadow = shadow; m.receiveShadow = receive; scene.add(m); if (hit) world.meshes.push(m); return m;
   }
 }
 // 通用材质
@@ -908,80 +914,165 @@ const gunScene = new THREE.Scene();
 const gunCam = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.01, 10); gunCam.rotation.order = 'YXZ'; gunScene.add(gunCam);
 const gunSun = new THREE.DirectionalLight(0xffffff, 1), gunHemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1); gunScene.add(gunSun, gunSun.target, gunHemi);
 const gunFill = new THREE.DirectionalLight(0xffffff, .5); gunFill.position.set(.5, .8, 1); gunCam.add(gunFill, gunFill.target);
-const gun = new THREE.Group(); gunCam.add(gun);
-{
-  const metal = texMat('gunmetal', .5, .5, { envMapIntensity: 1 }), metal2 = texMat('gunmetal', .5, .5, { color: 0x8a8d92, envMapIntensity: 1 });
-  const poly = new THREE.MeshStandardMaterial({ color: 0x24262a, roughness: .7, metalness: .1 });
-  const tan = texMat('gear', .5, .5, { color: 0xb9a07a });
-  const glove = texMat('gear', .5, .5, { color: 0x5a5646 });
-  const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); gun.add(m); return m; };
-  const B = (w, h, d) => new THREE.BoxGeometry(w, h, d), C = (r, h, s = 12) => new THREE.CylinderGeometry(r, r, h, s);
-  // 上下机匣
-  add(B(.07, .075, .42), metal, 0, .02, -.02); add(B(.068, .05, .3), metal, 0, -.04, .02);
-  add(B(.03, .02, .1), metal2, .036, .03, -.02);                                            // 抛壳窗
-  add(B(.04, .025, .09), metal, .045, .0, -.02);                                            // 抛壳挡板
-  add(B(.05, .03, .08), metal, 0, .01, .22); add(B(.02, .025, .06), poly, -.04, .01, .22);  // 拉机柄
-  add(B(.03, .02, .03), metal2, -.045, -.02, .02);                                          // 弹匣释放钮
-  // 顶部皮卡汀尼导轨
-  for (let i = 0; i < 16; i++) add(B(.068, .012, .022), metal2, 0, .064, .16 - i * .04);
-  // 护木 + M-LOK 槽
-  add(B(.062, .07, .36), metal, 0, .008, -.4);
-  for (let i = 0; i < 4; i++) { add(B(.064, .01, .05), poly, 0, .0, -.27 - i * .08); add(B(.02, .072, .05), poly, .0, .008, -.27 - i * .08); }
-  add(B(.03, .045, .07), poly, 0, -.05, -.5);                                               // 前握把
-  // 枪管 / 导气箍 / 消焰器
-  add(C(.013, .32), metal, 0, .02, -.72, Math.PI / 2); add(B(.04, .06, .04), metal, 0, .03, -.6);
-  add(C(.019, .08, 12), metal, 0, .02, -.9, Math.PI / 2); for (let i = 0; i < 4; i++) add(B(.044, .004, .05), poly, 0, .02, -.9, 0, 0, i * Math.PI / 4);
-  add(B(.012, .05, .02), metal, 0, .06, -.6);                                               // 准星座
-  // 弹匣（两段微曲）
-  add(B(.05, .13, .085), poly, 0, -.12, -.1, .1); add(B(.05, .1, .085), poly, 0, -.23, -.085, .32);
-  add(B(.03, .01, .06), tan, 0, -.27, -.07, .32);                                           // 弹匣底板
-  // 扳机护圈 / 握把 / 枪托
-  add(B(.015, .05, .04), metal, 0, -.085, .07); add(B(.015, .015, .14), metal, 0, -.1, .09); add(B(.006, .04, .006), metal, 0, -.085, .05);
-  add(B(.045, .1, .06), poly, 0, -.11, .13, -.25);
-  add(B(.04, .05, .22), metal, 0, -.005, .32); add(B(.06, .1, .12), poly, 0, -.01, .42); add(B(.065, .105, .025), tan, 0, -.01, .49);
-  add(B(.05, .025, .12), poly, 0, .055, .4);                                                // 贴腮板
-  // 红点瞄具：底座 + 镂空框 + 镜片 + 红点
-  add(B(.04, .035, .09), metal, 0, .09, -.06); add(C(.004, .03, 6), metal2, 0, .09, -.03, Math.PI / 2);
-  add(B(.06, .006, .022), metal, 0, .133, -.08); add(B(.06, .006, .022), metal, 0, .097, -.08);
-  add(B(.006, .042, .022), metal, -.027, .115, -.08); add(B(.006, .042, .022), metal, .027, .115, -.08);
-  add(B(.048, .03, .004), new THREE.MeshPhysicalMaterial({ color: 0x8fb4d8, transparent: true, opacity: .16, roughness: .05, metalness: 0, depthWrite: false }), 0, .115, -.08);
-  const dot = add(new THREE.SphereGeometry(.0035, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff2a2a, toneMapped: false }), 0, .115, -.079);
-  dot.name = 'reddot';
-  // 激光指示器 / 战术灯
-  add(C(.012, .07, 10), metal, .045, .0, -.46, Math.PI / 2); add(C(.016, .09, 10), metal, -.045, .0, -.5, Math.PI / 2); add(C(.013, .005, 10), new THREE.MeshBasicMaterial({ color: 0xfff0d0 }), -.045, 0, -.546, Math.PI / 2);
-  // 手：护木手（手掌 + 四指 + 拇指）与握把手
-  add(B(.075, .055, .11), glove, -.005, -.07, -.44); for (let i = 0; i < 4; i++) add(B(.016, .018, .05), glove, -.03 + i * .02, -.095, -.47 - (i % 2) * .01, 0, 0, 0); add(B(.02, .02, .06), glove, .04, -.05, -.4, 0, 0, .5);
-  add(B(.07, .08, .07), glove, .005, -.14, .12, -.25); for (let i = 0; i < 3; i++) add(B(.016, .02, .045), glove, -.03, -.1 - i * .022, .09 + i * .008, -.25);
-  add(B(.08, .08, .12), tan, 0, -.1, -.33); add(B(.09, .09, .14), tan, .01, -.19, .2, -.3);   // 袖口
+// ============================================================
+//  M4A1 卡宾枪（按真实尺寸还原，单位：米；构建坐标系 +X 为枪口方向）
+//  结构：平顶上机匣 / 下机匣 / A2 握把 / 6 位伸缩托 / KAC RAS 导轨护木 /
+//        三角准星座 / 14.5" 枪管 / A2 鸟笼消焰器 / STANAG 弯弹匣 / M68 红点镜
+// ============================================================
+function buildM4({ low = false, mats = {} } = {}) {
+  const metal = mats.metal || texMat('gunmetal', 1, 1, { envMapIntensity: 1 });                        // 阳极氧化黑
+  const park = mats.park || texMat('gunmetal', 1, 1, { color: 0x9a9ea3, envMapIntensity: .9 });          // 磷化钢（枪管 / 准星座）
+  const alu = mats.alu || texMat('gunmetal', 1, 1, { color: 0xb4bcae, roughness: 1, envMapIntensity: .8 }); // 铝弹匣（灰绿）
+  const poly = mats.poly || new THREE.MeshStandardMaterial({ color: 0x1d1f21, roughness: .78, metalness: .05, normalMap: SETS.gear.normalMap, normalScale: new THREE.Vector2(.25, .25) }); // 聚合物
+  const tan = mats.tan || new THREE.MeshStandardMaterial({ color: 0x9c8a66, roughness: .85, normalMap: SETS.gear.normalMap, normalScale: new THREE.Vector2(.3, .3) });   // 沙色导轨护片
+  const rubber = mats.rubber || new THREE.MeshStandardMaterial({ color: 0x161717, roughness: .95 });
+  const lens = new THREE.MeshPhysicalMaterial({ color: 0x9fc3e8, transparent: true, opacity: .14, roughness: .02, metalness: 0, depthWrite: false, side: THREE.DoubleSide });
+  const inner = new THREE.Group(); inner.rotation.y = Math.PI / 2;      // +X → -Z（朝向屏幕深处）
+  const root = new THREE.Group(); root.add(inner);
+  const parts = [];
+  const put = (m, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => { m.position.set(x, y, z); m.rotation.set(rx, ry, rz); inner.add(m); parts.push(m); return m; };
+  const B = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+  const box = (mat, w, h, d, x, y, z, rx, ry, rz) => put(new THREE.Mesh(B(w, h, d), mat), x, y, z, rx, ry, rz);
+  // 沿 X 轴的圆柱 / 圆台
+  const cylX = (mat, r1, r2, len, x, y = 0, z = 0, seg = low ? 10 : 20) => put(new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, len, seg), mat), x + len / 2, y, z, 0, 0, -Math.PI / 2);
+  // 侧视轮廓挤出（带倒角），depth 为厚度，沿 Z 居中
+  const prof = (mat, pts, depth, { bevel = low ? 0 : .0012, x = 0, y = 0, z = 0 } = {}) => {
+    const sh = pts instanceof THREE.Shape ? pts : new THREE.Shape(pts.map(p => new THREE.Vector2(p[0], p[1])));
+    const g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, curveSegments: low ? 6 : 14 });
+    g.translate(0, 0, -depth / 2); return put(new THREE.Mesh(g, mat), x, y, z);
+  };
+  // 旋成体（沿 X 轴），pts 为 [半径, 轴向位置]
+  const lathe = (mat, pts, x, y = 0, z = 0, seg = low ? 10 : 24) => put(new THREE.Mesh(new THREE.LatheGeometry(pts.map(p => new THREE.Vector2(p[0], p[1])), seg), mat), x, y, z, 0, 0, -Math.PI / 2);
+  // 皮卡汀尼导轨齿：沿 X 排列
+  const rail = (mat, x0, x1, y, z, width, { ry = 0, rz = 0 } = {}) => {
+    if (low) { box(mat, x1 - x0, .004, width, (x0 + x1) / 2, y, z); return; }
+    const n = Math.floor((x1 - x0) / .01); const b = new Batch();
+    for (let i = 0; i < n; i++) b.box(.0055, .0042, width, x0 + .005 + i * .01, 0, 0);
+    const m = b.build(mat); m.position.set(0, y, z); m.rotation.set(0, ry, rz); inner.add(m); parts.push(m);
+  };
+
+  // ---------- 上机匣（平顶）----------
+  prof(metal, [[-.105, -.014], [.092, -.014], [.092, .022], [.08, .027], [-.095, .027], [-.105, .018]], .031);
+  box(metal, .197, .007, .021, -.007, .030, 0);                      // 导轨基座
+  rail(metal, -.1, .09, .0355, 0, .021);                              // 顶部导轨齿
+  box(metal, .19, .002, .0225, -.008, .0335, 0);
+  cylX(metal, .0165, .0165, .016, -.121);                             // 机匣尾端（拉机柄槽）
+  // 拉机柄（T 形）
+  box(metal, .12, .006, .011, -.06, .018, 0); box(metal, .012, .009, .036, -.12, .018, 0); box(metal, .014, .007, .012, -.122, .018, -.021); box(metal, .006, .004, .006, -.118, .024, -.022);
+  // 抛壳窗（右侧 +Z）与防尘盖
+  box(new THREE.MeshStandardMaterial({ color: 0x0a0a0b, roughness: .9 }), .065, .018, .003, .02, .004, .0155);
+  box(metal, .063, .017, .0015, .02, .004, .0175); box(metal, .063, .003, .003, .02, .0135, .0175); box(metal, .006, .006, .002, .048, .002, .019);
+  if (!low) { for (let i = 0; i < 2; i++) box(metal, .004, .014, .003, .015 + i * .03, .004, .0185); }
+  // 抛壳挡板（楔形）与辅助推机柄
+  prof(metal, [[.054, -.004], [.072, -.004], [.072, .018], [.062, .022], [.054, .018]], .012, { z: .021 });
+  cylX(metal, .0075, .0075, .022, -.045, .008, .017); cylX(metal, .006, .006, .006, -.023, .008, .017); box(metal, .03, .014, .01, -.035, .008, .013);
+  // 弹匣释放按钮（右侧）与护栏
+  cylX(metal, .005, .005, .006, -.001, -.027, .017); if (!low) box(metal, .02, .022, .003, -.003, -.027, .018);
+  // ---------- 下机匣 ----------
+  prof(metal, [[-.105, -.014], [.092, -.014], [.092, -.026], [.077, -.028], [.066, -.082], [.0, -.082], [-.004, -.044], [-.062, -.044], [-.07, -.05], [-.097, -.05], [-.105, -.04]], .029);
+  // 弹匣井口加强 / 卡笋 / 快慢机 / 销钉
+  box(metal, .066, .006, .031, .035, -.082, 0);
+  box(metal, .012, .018, .003, -.012, -.02, -.016); box(metal, .022, .006, .003, -.02, -.012, -.0165);           // 空仓挂机（左侧）
+  cylX(metal, .005, .005, .003, -.072, -.03, -.0165); box(metal, .024, .005, .003, -.08, -.03, -.017);             // 快慢机（左侧）
+  cylX(metal, .004, .004, .033, .072, -.02, 0); cylX(metal, .004, .004, .033, -.094, -.022, 0);                   // 枢轴销 / 分解销
+  if (!low) { cylX(metal, .0055, .0055, .004, -.0145, -.03, -.017); }
+  // 扳机 / 护圈
+  box(metal, .004, .022, .007, -.03, -.052, 0, 0, 0, -.18);
+  box(metal, .066, .0035, .012, -.033, -.07, 0); box(metal, .004, .024, .012, -.063, -.057, 0); box(metal, .004, .026, .012, -.004, -.057, 0);
+  // ---------- A2 握把 ----------
+  prof(poly, [[-.055, -.044], [-.088, -.044], [-.1, -.08], [-.118, -.128], [-.113, -.136], [-.086, -.136], [-.08, -.112], [-.071, -.092], [-.069, -.084], [-.061, -.064]], .024, { bevel: low ? 0 : .002 });
+  if (!low) { box(poly, .012, .006, .022, -.084, -.136, 0); for (let i = 0; i < 9; i++) box(poly, .0012, .03, .0245, -.1 - i * .0028, -.1 - i * .0048, 0, 0, 0, .3); }
+  // ---------- 缓冲管 / 城堡螺母 / 伸缩托 ----------
+  cylX(metal, .0145, .0145, .19, -.295, .002, 0); cylX(metal, .018, .018, .008, -.113, .002, 0); box(metal, .003, .044, .034, -.106, -.008, 0);
+  if (!low) { const b = new Batch(); for (let i = 0; i < 6; i++) b.add(new THREE.CylinderGeometry(.0149, .0149, .001, 16), -.15 - i * .02, .002, 0, 0, 0, Math.PI / 2); const m = b.build(metal); inner.add(m); parts.push(m); } // 托位凹槽
+  prof(poly, [[-.165, .02], [-.335, .022], [-.34, .01], [-.342, -.09], [-.334, -.1], [-.316, -.1], [-.3, -.092], [-.185, -.03], [-.172, -.02], [-.165, -.012]], .034, { bevel: low ? 0 : .002 });
+  box(poly, .03, .036, .036, -.18, .002, 0);                            // 托环
+  box(poly, .17, .012, .033, -.25, .024, 0);                            // 托顶（贴腮）
+  box(rubber, .01, .118, .038, -.342, -.04, 0);                         // 橡胶托底板
+  if (!low) { box(poly, .028, .01, .01, -.19, -.028, 0); box(poly, .02, .006, .016, -.205, -.032, 0); put(new THREE.Mesh(new THREE.TorusGeometry(.009, .0018, 6, 14), metal), -.3, -.104, 0, Math.PI / 2); } // 释放杆 / 背带环
+  // ---------- 三角座 / 枪管 / 护木 ----------
+  cylX(metal, .026, .026, .014, .094); cylX(metal, .023, .021, .012, .108);                          // 三角环 / 枪管螺母
+  cylX(park, .0105, .0105, .22, .092); cylX(park, .0095, .0095, .09, .312); cylX(park, .0112, .0112, .02, .40);   // 枪管（护木内段 / 外露段 / 螺纹座）
+  cylX(park, .003, .003, .21, .1, .0185, 0, 6);                                                   // 导气管
+  // KAC RAS 四面导轨护木：圆筒 + 四条导轨 + 侧面沙色护片
+  cylX(metal, .0215, .0205, .165, .12, 0, 0, low ? 12 : 24);
+  for (const [a, dy, dz] of [[0, .0275, 0], [Math.PI, -.0275, 0], [Math.PI / 2, 0, .0275], [-Math.PI / 2, 0, -.0275]]) {
+    box(metal, .165, .008, .021, .2025, dy * .85, dz * .85, a); rail(metal, .122, .283, dy, dz, .021, { rz: a === Math.PI ? Math.PI : 0, ry: 0 });
+  }
+  if (!low) { box(tan, .095, .003, .024, .235, 0, .0315); box(tan, .095, .003, .024, .235, 0, -.0315); for (let i = 0; i < 8; i++) { box(tan, .006, .0012, .025, .195 + i * .011, 0, .033); box(tan, .006, .0012, .025, .195 + i * .011, 0, -.033); } }
+  // 垂直握把（底部导轨）
+  cylX(poly, .013, .013, .006, .205, -.031, 0); put(new THREE.Mesh(new THREE.CylinderGeometry(.0125, .0155, .095, low ? 10 : 18), poly), .208, -.082, 0);
+  if (!low) { for (let i = 0; i < 5; i++) put(new THREE.Mesh(new THREE.TorusGeometry(.014 + i * .0006, .0012, 6, 18), poly), .208, -.05 - i * .015, 0, Math.PI / 2); put(new THREE.Mesh(new THREE.CylinderGeometry(.015, .016, .01, 18), rubber), .208, -.134, 0); }
+  // 前准星座（FSB）：底座环 + 三角塔 + 护翼 + 准星柱 + 背带环 + 刺刀座
+  cylX(park, .0155, .0155, .034, .296); 
+  prof(park, [[.298, 0], [.33, 0], [.326, .04], [.322, .056], [.306, .056], [.302, .04]], .018);
+  box(park, .02, .014, .003, .314, .062, .0075); box(park, .02, .014, .003, .314, .062, -.0075); cylX(park, .0012, .0012, .012, .314 - .006, .062, 0, 6); box(park, .002, .018, .002, .314, .058, 0);
+  put(new THREE.Mesh(new THREE.TorusGeometry(.009, .0017, 6, 14), park), .312, -.024, 0, 0, Math.PI / 2); box(park, .012, .005, .006, .312, -.017, 0);
+  box(park, .04, .008, .012, .35, -.014, 0); box(park, .014, .004, .012, .345, -.02, 0);                           // 刺刀座
+  // A2 鸟笼消焰器（底部封闭，5 条开槽）
+  lathe(park, [[.0105, 0], [.0115, .006], [.0115, .012], [.0112, .044], [.0118, .05], [.0118, .056], [.0105, .058], [.009, .058], [.009, .04], [.0085, .012], [.009, 0]], .415);
+  if (!low) for (let i = 0; i < 5; i++) { const a = -Math.PI * .55 + i * (Math.PI * 1.1 / 4); const m = box(new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 1 }), .026, .0022, .004, .445, Math.cos(a) * .0115, Math.sin(a) * .0115); m.rotation.x = a + Math.PI / 2; }
+  // ---------- STANAG 30 发弯弹匣 ----------
+  { const s = new THREE.Shape(); s.moveTo(.002, -.08); s.lineTo(.064, -.08); s.quadraticCurveTo(.08, -.14, .098, -.192); s.lineTo(.098, -.2); s.lineTo(.046, -.2); s.quadraticCurveTo(.02, -.145, .002, -.08);
+    prof(alu, s, .024, { bevel: low ? 0 : .0015 });
+    if (!low) { for (const side of [-1, 1]) for (let i = 0; i < 2; i++) { const m = prof(alu, [[.016 + i * .018, -.09], [.021 + i * .018, -.09], [.058 + i * .016, -.19], [.053 + i * .016, -.19]], .002, { bevel: 0, z: side * .0128 }); m.visible = true; } }
+    prof(poly, [[.044, -.199], [.1, -.199], [.1, -.206], [.044, -.206]], .028, { bevel: 0 });   // 底板
+  }
+  // ---------- M68 CCO（Aimpoint CompM2）红点镜：底座 + 镜筒 + 旋钮 + 镜片 ----------
+  const sy = .036 + .022 + .0165;                                     // 瞄准轴高度（相对膛轴）
+  box(metal, .05, .022, .026, -.035, .036 + .011, 0); box(metal, .03, .006, .034, -.035, .041, 0);                  // 底座 / 夹块
+  if (!low) { cylX(metal, .004, .004, .036, -.035, .041, -.018); box(metal, .006, .008, .006, -.035, .041, .02); }
+  put(new THREE.Mesh(new THREE.TorusGeometry(.0175, .003, 8, low ? 12 : 24), metal), -.035, sy, 0, 0, Math.PI / 2);   // 环形夹
+  put(new THREE.Mesh(new THREE.CylinderGeometry(.0165, .0165, .11, low ? 12 : 28, 1, true), metal), -.03, sy, 0, 0, 0, Math.PI / 2);                           // 外筒
+  put(new THREE.Mesh(new THREE.CylinderGeometry(.0135, .0135, .11, low ? 12 : 28, 1, true), new THREE.MeshStandardMaterial({ color: 0x0b0b0c, roughness: 1, side: THREE.BackSide })), -.03, sy, 0, 0, 0, Math.PI / 2); // 内壁
+  for (const ex of [-.085, .025]) { put(new THREE.Mesh(new THREE.RingGeometry(.0135, .0165, low ? 12 : 28), metal), ex, sy, 0, 0, Math.PI / 2); put(new THREE.Mesh(new THREE.RingGeometry(.0135, .0185, low ? 12 : 28), metal), ex + (ex < 0 ? -.001 : .001), sy, 0, 0, Math.PI / 2); }
+  for (const ex of [-.098, .022]) put(new THREE.Mesh(new THREE.CylinderGeometry(.0185, .0185, .014, low ? 12 : 28, 1, true), metal), ex + .007, sy, 0, 0, 0, Math.PI / 2);   // 两端镜圈（开口）
+  if (!low) { cylX(metal, .009, .01, .018, -.058, sy + .018, 0); put(new THREE.Mesh(new THREE.CylinderGeometry(.009, .01, .018, 14), metal), -.05, sy, .024, Math.PI / 2); put(new THREE.Mesh(new THREE.CylinderGeometry(.0075, .0085, .022, 14), metal), -.005, sy - .004, .019, 0, 0, .7); } // 调节旋钮 / 电池仓
+  put(new THREE.Mesh(new THREE.CircleGeometry(.0135, 24), lens), .032, sy, 0, 0, Math.PI / 2); put(new THREE.Mesh(new THREE.CircleGeometry(.0135, 24), lens), -.092, sy, 0, 0, Math.PI / 2);
+  const dot = put(new THREE.Mesh(new THREE.SphereGeometry(.0028, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff2a2a, toneMapped: false })), .03, sy, 0); dot.name = 'reddot';
+  // 枪口 / 抛壳口 锚点
+  const muzzle = new THREE.Object3D(); muzzle.position.set(.475, 0, 0); inner.add(muzzle);
+  const eject = new THREE.Object3D(); eject.position.set(.03, .008, .02); inner.add(eject);
+  root.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+  return { root, inner, parts, muzzle, eject, sightY: sy };
+}
+const M4 = buildM4();
+const gun = M4.root; gunCam.add(gun);
+const muzzle = M4.muzzle;
+{ // 戴手套的双手：右手握 A2 握把，左手握垂直握把
+  const glove = texMat('gear', .5, .5, { color: 0x4c4a40 }), sleeve = texMat('camo', 1, 1);
+  const H = (w, h, d, x, y, z, rx = 0, ry = 0, rz = 0, mat = glove) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); M4.inner.add(m); return m; };
+  // 右手
+  H(.034, .072, .022, -.097, -.095, .02, 0, 0, -.32); for (let i = 0; i < 3; i++) H(.032, .015, .034, -.072 - i * .006, -.07 - i * .019, .004, 0, 0, -.32); H(.018, .013, .03, -.09, -.06, -.02, 0, 0, -.5); H(.045, .05, .046, -.13, -.145, .012, 0, 0, -.5); H(.06, .052, .05, -.165, -.178, .012, 0, 0, -.55, sleeve);
+  // 左手
+  H(.03, .07, .024, .19, -.09, -.017); for (let i = 0; i < 4; i++) H(.016, .014, .038, .226, -.06 - i * .017, 0); H(.03, .014, .014, .2, -.052, -.03); H(.05, .046, .042, .17, -.13, -.012, 0, 0, .55); H(.06, .052, .05, .135, -.162, -.012, 0, 0, .6, sleeve);
   gun.traverse(o => { o.castShadow = false; o.receiveShadow = false; });
 }
-const muzzle = new THREE.Object3D(); muzzle.position.set(0, .02, -.9); gun.add(muzzle);
 const muzzleLight = new THREE.PointLight(0xffb060, 0, 18, 2); muzzleLight.castShadow = true; muzzleLight.shadow.mapSize.set(512, 512); muzzleLight.shadow.bias = -.003; muzzleLight.visible = false; scene.add(muzzleLight);
 const muzzleLightVM = new THREE.PointLight(0xffb060, 0, 3, 2); muzzleLightVM.visible = false; muzzle.add(muzzleLightVM);
 const flashMesh = new THREE.Mesh(new THREE.PlaneGeometry(.32, .32), new THREE.MeshBasicMaterial({ map: TEX.flash, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
 flashMesh.visible = false; muzzle.add(flashMesh);
 let flashT = 0;
 
-const HIP = { pos: V3(.26, -.24, -.48), rot: V3(0, .04, 0) }, ADS = { pos: V3(0, -.115, -.3), rot: V3(0, 0, 0) };
+const HIP = { pos: V3(.17, -.2, -.3), rot: V3(0, .05, 0) }, ADS = { pos: V3(0, -M4.sightY, -.3), rot: V3(0, 0, 0) };
 let gunPos = HIP.pos.clone(), gunKickZ = 0, swayX = 0, swayY = 0;
 
 function updateGun(dt) {
   const wantADS = mouse.right && !G.reloading && P.alive && !P.sprint;
   G.ads = lerp(G.ads, wantADS ? 1 : 0, 1 - Math.exp(-dt * 12));
   camera.fov = lerp(75, 48, G.ads); camera.updateProjectionMatrix();
-  gunCam.fov = lerp(70, 50, G.ads); gunCam.aspect = camera.aspect; gunCam.updateProjectionMatrix();
+  gunCam.fov = lerp(60, 44, G.ads); gunCam.aspect = camera.aspect; gunCam.updateProjectionMatrix();
   const sp = Math.hypot(P.hvel.x, P.hvel.z);
   const bobA = (1 - G.ads * .85) * Math.min(1, sp / 5) * (P.onGround ? 1 : 0);
   const bx = Math.sin(P.bob) * .012 * bobA, by = Math.abs(Math.cos(P.bob)) * .012 * bobA;
   const target = V3().lerpVectors(HIP.pos, ADS.pos, G.ads);
-  if (P.sprint) target.add(V3(-.08, -.05, .05));
+  if (P.sprint) target.add(V3(-.06, -.04, .06));
   if (G.reloading) { const t = G.reloadT / 1.9; target.add(V3(0, -.12 * Math.sin(t * Math.PI), .04)); }
   target.x += bx + swayX * (1 - G.ads * .8); target.y += by + swayY * (1 - G.ads * .8); target.z += gunKickZ;
   gunPos.lerp(target, 1 - Math.exp(-dt * 14)); gun.position.copy(gunPos);
   gun.rotation.set(lerp(HIP.rot.x, ADS.rot.x, G.ads) + gunKickZ * 1.2 + (G.reloading ? -.25 * Math.sin(G.reloadT / 1.9 * Math.PI) : 0), lerp(HIP.rot.y, ADS.rot.y, G.ads) + (P.sprint ? .35 : 0), P.sprint ? -.25 : 0);
   gunKickZ = lerp(gunKickZ, 0, 1 - Math.exp(-dt * 16));
   swayX = lerp(swayX, 0, 1 - Math.exp(-dt * 6)); swayY = lerp(swayY, 0, 1 - Math.exp(-dt * 6));
-  gun.getObjectByName('reddot').visible = G.ads > .3;
 
   G.cooldown -= dt;
   if (mouse.left && G.cooldown <= 0 && !G.reloading && P.alive && !P.sprint) shoot();
@@ -1087,7 +1178,7 @@ function tracer(a, b, color) {
 function updateTracers(dt) { for (const t of tracers) { if (!t.m.visible) continue; t.life -= dt; t.m.material.opacity = Math.max(0, t.life / .09); if (t.life <= 0) t.m.visible = false; } }
 
 function casing() {
-  const p = gun.localToWorld(V3(.05, .03, -.05));
+  const p = M4.eject.getWorldPosition(V3());
   const right = V3(Math.cos(P.yaw), 0, -Math.sin(P.yaw));
   casings.spawn(p, right.multiplyScalar(rnd(1.5, 2.5)).add(V3(0, rnd(1.5, 2.5), 0)).add(camera.getWorldDirection(V3()).multiplyScalar(-.5)), 1.4, 12);
 }
@@ -1208,13 +1299,16 @@ class Enemy {
     this.armL = arm(-1); this.armR = arm(1);
     // 步枪
     this.gun = new THREE.Group(); this.group.add(this.gun);
-    mk(B(.06, .09, .5), gunM, 0, 0, -.05, 'body', this.gun); mk(B(.05, .06, .3), gunM, 0, 0, -.42, 'body', this.gun);
-    mk(new THREE.CylinderGeometry(.012, .012, .3, 8), gunM, 0, .015, -.65, 'body', this.gun).rotation.x = Math.PI / 2;
-    mk(B(.045, .18, .07), gunM, 0, -.12, -.03, 'body', this.gun).rotation.x = .15; mk(B(.05, .07, .2), gear, 0, -.01, .28, 'body', this.gun); mk(B(.04, .08, .05), gear, 0, -.08, .1, 'body', this.gun);
-    mk(B(.04, .05, .08), gunM, 0, .07, -.1, 'body', this.gun);
-    const laser = new THREE.Mesh(new THREE.SphereGeometry(.015, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff2020, toneMapped: false })); laser.position.set(0, .04, -.3); this.gun.add(laser);
-    this.gun.position.set(.12, 1.3, -.35);
-    this.muzzle = V3(.12, 1.3, -.75);
+    { // 低细节 M4A1：按材质合并为少量网格
+      const rifle = buildM4({ low: true, mats: { metal: gunM, park: gunM, alu: gunM, poly: gear, tan: gear, rubber: gear } });
+      const merged = new THREE.Group(); merged.rotation.y = Math.PI / 2; this.gun.add(merged);
+      const groups = new Map();
+      for (const p of rifle.parts) { if (!groups.has(p.material)) groups.set(p.material, new Batch()); groups.get(p.material).addMesh(p); }
+      for (const [mat, b] of groups) { const m = b.build(mat); m.castShadow = m.receiveShadow = true; m.userData = { enemy: this, part: 'body' }; merged.add(m); }
+    }
+    const laser = new THREE.Mesh(new THREE.SphereGeometry(.012, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff2020, toneMapped: false })); laser.position.set(0, -.01, -.3); this.gun.add(laser);
+    this.gun.position.set(.14, 1.28, -.2);
+    this.muzzle = V3(.14, 1.28, -.68);
     scene.add(this.group); enemyMeshCache = null;
     this.parts = []; this.group.traverse(o => { if (o.isMesh && o.userData.enemy) this.parts.push(o); });
   }
@@ -1305,7 +1399,7 @@ class Enemy {
     const sw = Math.sin(this.anim) * .7 * this.moveAmt;
     this.legL.rotation.x = sw; this.legR.rotation.x = -sw;
     this.armL.rotation.x = -sw * .5 - (this.alert ? 1.2 : 0); this.armR.rotation.x = sw * .5 - (this.alert ? 1.2 : 0);
-    this.gun.rotation.x = this.alert ? .05 : -.6; this.gun.position.set(.12, this.alert ? 1.3 : 1.05, this.alert ? -.35 : -.2);
+    this.gun.rotation.x = this.alert ? .03 : -.6; this.gun.position.set(.14, this.alert ? 1.28 : 1.0, this.alert ? -.2 : -.1);
     this.torso.position.y = 1.18 + Math.abs(Math.cos(this.anim)) * .03 * this.moveAmt;
   }
   fire(dist) {
@@ -1483,7 +1577,7 @@ $('start').addEventListener('click', async () => {
 // ============================================================
 setPreset(0, true);
 updateShadowCamera();
-window.__fps = { P, G, state, enemies, setPreset, scene, renderer, get now() { return now; } };
+window.__fps = { P, G, state, enemies, setPreset, scene, renderer, gun, M4, HIP, get now() { return now; } };
 const clock = new THREE.Clock();
 function frame() {
   requestAnimationFrame(frame);
