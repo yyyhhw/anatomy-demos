@@ -230,7 +230,14 @@ manager.onProgress = (url, n, total) => { $('bar').style.width = (n / total * 10
 const gltfLoader = new GLTFLoader(manager), texLoader = new THREE.TextureLoader(manager);
 async function loadAssets() {
   const jobs = [];
-  for (const n of MODEL_NAMES) jobs.push(gltfLoader.loadAsync(`${A}models/${n}.glb`).then(g => { G[n] = g; }));
+  // 托管页面不提供 .glb 类型：那里改取 Base64 文本并在内存中解码
+  const loadModel = async n => {
+    if (!window.__B64MODELS) return gltfLoader.loadAsync(`${A}models/${n}.glb`);
+    manager.itemStart(n); const txt = await (await fetch(`${A}models/${n}.glb.txt`)).text(); const bin = atob(txt), buf = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    const g = await gltfLoader.parseAsync(buf.buffer, ''); manager.itemEnd(n); return g;
+  };
+  for (const n of MODEL_NAMES) jobs.push(loadModel(n).then(g => { G[n] = g; }));
   for (const n of Object.keys(TILE)) for (const s of ['d', 'n', 'arm']) jobs.push(texLoader.loadAsync(`${A}tex/${n}_${s}.webp`).then(t => { TX[n + '_' + s] = t; }));
   for (const k of ['day', 'dusk', 'night']) jobs.push(texLoader.loadAsync(`${A}sky/${k}.webp`).then(t => { t.colorSpace = THREE.NoColorSpace; t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.ClampToEdgeWrapping; t.minFilter = THREE.LinearFilter; t.generateMipmaps = false; TX['sky_' + k] = t; }));
   await Promise.all(jobs);
