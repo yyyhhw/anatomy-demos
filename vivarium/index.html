@@ -1,0 +1,1104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>生态缸 · 水与湿地</title>
+<style>
+:root{--bg:#05080a;--panel:rgba(9,15,15,.64);--line:rgba(255,255,255,.09);--text:#cbd6d1;--strong:#f1f6f3;--muted:#7d8e88;--accent:#7fd6a8;--accent2:#ffb36b;--blue:#7cc4ff}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/1.45 -apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans SC","Microsoft YaHei",sans-serif;overflow:hidden}
+#c{display:block;position:fixed;inset:0;width:100vw;height:100vh;touch-action:none}
+.panel{position:fixed;z-index:2;background:var(--panel);-webkit-backdrop-filter:blur(14px) saturate(1.2);backdrop-filter:blur(14px) saturate(1.2);border:1px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:0 12px 32px rgba(0,0,0,.35);box-sizing:border-box}
+#ctl{left:14px;top:14px;width:272px}
+#eco{right:14px;top:14px;width:284px}
+.hd{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+h1{font-size:14.5px;margin:0;color:var(--strong);font-weight:600;letter-spacing:.4px}
+.sub{color:var(--muted);font-size:11.5px;margin-top:2px}
+.fold{flex:none;width:24px;height:24px;padding:0;line-height:1;border-radius:7px}
+.panel.min .body{display:none}
+.sec{font-size:11px;color:var(--muted);letter-spacing:1px;margin:12px 0 6px}
+.row{display:grid;grid-template-columns:40px 1fr 64px;align-items:center;gap:8px;margin:4px 0}
+.row output{font-variant-numeric:tabular-nums;text-align:right;color:var(--strong);font-size:12px;white-space:nowrap}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:20px;background:transparent;margin:0}
+input[type=range]::-webkit-slider-runnable-track{height:3px;background:rgba(255,255,255,.14);border-radius:2px}
+input[type=range]::-moz-range-track{height:3px;background:rgba(255,255,255,.14);border-radius:2px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:#e9f5ef;margin-top:-5px;box-shadow:0 0 0 3px rgba(127,214,168,.25)}
+input[type=range]::-moz-range-thumb{width:13px;height:13px;border:0;border-radius:50%;background:#e9f5ef}
+.btns{display:flex;gap:5px;flex-wrap:wrap}
+button{background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:4px 9px;font:inherit;font-size:12px;cursor:pointer;transition:background .15s}
+button:hover{background:rgba(255,255,255,.12)}
+button.on{background:rgba(127,214,168,.18);border-color:rgba(127,214,168,.5);color:#e3fff0}
+.clock{display:flex;align-items:baseline;justify-content:space-between;margin:10px 0 4px}
+#clockT{font-size:26px;font-weight:300;color:var(--strong);font-variant-numeric:tabular-nums;letter-spacing:1px}
+#clockW{font-size:12px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
+.m{background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.05);border-radius:9px;padding:6px 8px}
+.m .k{font-size:10.5px;color:var(--muted)}
+.m .v{font-size:15px;color:var(--strong);font-variant-numeric:tabular-nums;white-space:nowrap}
+.m .v small{font-size:10.5px;color:var(--muted);margin-left:2px}
+.bar{height:3px;border-radius:2px;background:rgba(255,255,255,.08);margin-top:4px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);width:0}
+#spark{width:100%;height:58px;display:block;margin-top:10px}
+.lg{display:flex;gap:12px;font-size:10.5px;color:var(--muted);margin-top:2px}
+.lg b{display:inline-block;width:9px;height:2px;vertical-align:middle;margin-right:4px}
+#status{margin-top:8px;font-size:11.5px;color:var(--text);min-height:34px}
+#hint{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);font-size:11.5px;color:rgba(255,255,255,.45);z-index:2;white-space:nowrap;pointer-events:none}
+#loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--muted);z-index:9;font-size:14px;letter-spacing:2px;transition:opacity .6s}
+@media (max-width:760px){
+  #ctl{left:10px;right:10px;top:10px;width:auto;padding:10px 12px}
+  #eco{left:10px;right:10px;top:auto;bottom:10px;width:auto;padding:10px 12px}
+  .grid{grid-template-columns:repeat(3,1fr)}
+  #hint{display:none}
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="loading">正在生成生态缸…</div>
+
+<div id="ctl" class="panel">
+  <div class="hd"><div><h1>生态缸 · 水 / 湿地 / 枯木</h1><div class="sub">120 × 70 × 80 cm 开放式雨林缸</div></div><button class="fold" aria-label="折叠">–</button></div>
+  <div class="body">
+    <div class="clock"><span id="clockT">09:00</span><span id="clockW">晴</span></div>
+    <div class="row"><label>时间</label><input id="sHour" type="range" min="0" max="23.99" step="0.01"><output id="oHour"></output></div>
+    <div class="row"><label>流速</label><input id="sSpeed" type="range" min="0" max="100" step="1"><output id="oSpeed"></output></div>
+    <div class="btns" style="margin-top:4px"><button id="bPause">暂停</button></div>
+    <div class="sec">天气</div>
+    <div class="btns" id="wBtns"><button data-w="auto" class="on">自动</button><button data-w="0">晴</button><button data-w="1">多云</button><button data-w="2">阵雨</button><button data-w="3">暴雨</button></div>
+    <div class="row" style="margin-top:6px"><label>云量</label><input id="sCloud" type="range" min="0" max="1" step="0.01"><output id="oCloud"></output></div>
+    <div class="row"><label>降雨</label><input id="sRain" type="range" min="0" max="1" step="0.01"><output id="oRain"></output></div>
+    <div class="row"><label>风力</label><input id="sWind" type="range" min="0" max="1" step="0.01"><output id="oWind"></output></div>
+    <div class="row"><label>风向</label><input id="sDir" type="range" min="0" max="360" step="1"><output id="oDir"></output></div>
+    <div class="sec">视角</div>
+    <div class="btns" id="camBtns"><button data-c="0">全景</button><button data-c="1">水下侧视</button><button data-c="2">湿地</button><button data-c="3">枯木</button><button data-c="4">俯视</button></div>
+  </div>
+</div>
+
+<div id="eco" class="panel">
+  <div class="hd"><h1>生态监测</h1><button class="fold" aria-label="折叠">–</button></div>
+  <div class="body">
+    <div class="grid">
+      <div class="m"><div class="k">光照</div><div class="v" id="mLux">–</div></div>
+      <div class="m"><div class="k">气温 / 水温</div><div class="v" id="mTemp">–</div></div>
+      <div class="m"><div class="k">空气湿度</div><div class="v" id="mHum">–</div><div class="bar"><i id="bHum"></i></div></div>
+      <div class="m"><div class="k" id="kDO">溶解氧</div><div class="v" id="mDO">–</div><div class="bar"><i id="bDO"></i></div></div>
+      <div class="m"><div class="k" id="kCO2">CO₂</div><div class="v" id="mCO2">–</div></div>
+      <div class="m"><div class="k">水位</div><div class="v" id="mLvl">–</div></div>
+      <div class="m"><div class="k">地表湿润</div><div class="v" id="mWet">–</div><div class="bar"><i id="bWet"></i></div></div>
+      <div class="m"><div class="k">水草生物量</div><div class="v" id="mBio">–</div></div>
+    </div>
+    <canvas id="spark" width="480" height="116"></canvas>
+    <div class="lg"><span><b style="background:var(--accent)"></b>溶解氧</span><span><b style="background:var(--accent2)"></b>水温</span><span><b style="background:var(--blue)"></b>水位</span><span style="margin-left:auto">近 24 小时</span></div>
+    <div id="status"></div>
+  </div>
+</div>
+<div id="hint">拖动旋转 · 滚轮 / 双指缩放 · 右键平移 · 空格暂停</div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+
+const V3 = THREE.Vector3, V2 = THREE.Vector2, C = (h) => new THREE.Color(h);
+
+// ============================================================ 基础工具
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const rand = mulberry32(20261116);
+const rr = (a,b)=>a+(b-a)*rand();
+const gauss = ()=>{let u=0,v=0;while(!u)u=rand();while(!v)v=rand();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)};
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const ss=(a,b,x)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t)};
+const lerp=(a,b,t)=>a+(b-a)*t;
+
+const PERM=new Uint8Array(512);{const p=[...Array(256).keys()];for(let i=255;i>0;i--){const j=Math.floor(rand()*(i+1));[p[i],p[j]]=[p[j],p[i]]}for(let i=0;i<512;i++)PERM[i]=p[i&255]}
+const GR=[[1,1],[-1,1],[1,-1],[-1,-1],[1,0],[-1,0],[0,1],[0,-1]];
+const F2=0.5*(Math.sqrt(3)-1),G2=(3-Math.sqrt(3))/6;
+function snoise(x,y){
+  const s=(x+y)*F2,i=Math.floor(x+s),j=Math.floor(y+s),t=(i+j)*G2;
+  const x0=x-(i-t),y0=y-(j-t),i1=x0>y0?1:0,j1=x0>y0?0:1;
+  const x1=x0-i1+G2,y1=y0-j1+G2,x2=x0-1+2*G2,y2=y0-1+2*G2,ii=i&255,jj=j&255;
+  let n=0,q;
+  q=0.5-x0*x0-y0*y0;if(q>0){const g=GR[PERM[ii+PERM[jj]]&7];q*=q;n+=q*q*(g[0]*x0+g[1]*y0)}
+  q=0.5-x1*x1-y1*y1;if(q>0){const g=GR[PERM[ii+i1+PERM[jj+j1]]&7];q*=q;n+=q*q*(g[0]*x1+g[1]*y1)}
+  q=0.5-x2*x2-y2*y2;if(q>0){const g=GR[PERM[ii+1+PERM[jj+1]]&7];q*=q;n+=q*q*(g[0]*x2+g[1]*y2)}
+  return 70*n;
+}
+function fbm2(x,y,o=4){let s=0,a=0.5,f=1,nm=0;for(let i=0;i<o;i++){s+=a*snoise(x*f,y*f);nm+=a;f*=2.03;a*=0.5}return s/nm}
+
+// ============================================================ 地形
+const TX=60, TZ=35, TH=80, WL0=24;   // 单位：厘米
+function terrainH(x,z){
+  const n1=fbm2(x*0.018+3.1,z*0.022-1.7,3);
+  const d=x*0.85+z*0.42+n1*16;                 // 岸线坐标：负=陆地 正=水域
+  const landT=1-ss(-50,-18,d), wetT=1-ss(-20,2,d), deepT=ss(0,34,d);
+  let h=4+19*(1-deepT)+2.6*wetT+9*landT;
+  h+=fbm2(x*0.06,z*0.06,4)*(0.9+2.6*landT);
+  h+=Math.max(0,fbm2(x*0.13+7,z*0.13,3))*1.8*wetT*(1-landT);
+  h+=ss(8,35,-z)*4.5*(1-deepT*0.7);
+  return h;
+}
+const NX=240, NZ=140;
+const HG=new Float32Array((NX+1)*(NZ+1));
+for(let j=0;j<=NZ;j++)for(let i=0;i<=NX;i++)HG[j*(NX+1)+i]=terrainH(-TX+i/NX*2*TX,-TZ+j/NZ*2*TZ);
+function hAt(x,z){
+  const fx=clamp((x+TX)/(2*TX)*NX,0,NX-1e-3),fz=clamp((z+TZ)/(2*TZ)*NZ,0,NZ-1e-3);
+  const i=Math.floor(fx),j=Math.floor(fz),u=fx-i,v=fz-j,k=j*(NX+1)+i;
+  return lerp(lerp(HG[k],HG[k+1],u),lerp(HG[k+NX+1],HG[k+NX+2],u),v);
+}
+
+// ============================================================ 渲染器 / 场景
+const canvas=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+const scene=new THREE.Scene();
+scene.fog=new THREE.FogExp2(0x8899aa,0.0012);
+const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,0.5,4000);
+camera.position.set(80,62,150);
+const controls=new OrbitControls(camera,canvas);
+controls.target.set(0,22,0);
+controls.enableDamping=true;controls.dampingFactor=0.07;
+controls.minDistance=25;controls.maxDistance=480;controls.maxPolarAngle=Math.PI*0.94;
+
+// 全局 uniforms（所有着色器共享）
+const G={
+  uTime:{value:0},uWL:{value:WL0},uWind:{value:new V2()},uGust:{value:0},uWindOff:{value:new V2()},
+  uCurrent:{value:new V2(0.35,0.12)},uSunDir:{value:new V3(0,1,0)},uSunCol:{value:new THREE.Color(1,1,1)},
+  uSunI:{value:1},uDay:{value:1},uWet:{value:0},uTurb:{value:0},uCloud:{value:0},uFlash:{value:0},
+  uWaterCol:{value:new THREE.Color(0.018,0.075,0.06)},uRain:{value:0},uHum:{value:0},uMist:{value:0},
+};
+
+// ============================================================ GLSL 公共片段
+const GLSL_NOISE=`
+float vh12(vec2 p){vec3 p3=fract(vec3(p.xyx)*0.1031);p3+=dot(p3,p3.yzx+33.33);return fract((p3.x+p3.y)*p3.z);}
+float vh13(vec3 p3){p3=fract(p3*0.1031);p3+=dot(p3,p3.zyx+31.32);return fract((p3.x+p3.y)*p3.z);}
+float vnoise(vec2 p){vec2 i=floor(p),f=fract(p);vec2 u=f*f*(3.0-2.0*f);
+  return mix(mix(vh12(i),vh12(i+vec2(1,0)),u.x),mix(vh12(i+vec2(0,1)),vh12(i+vec2(1,1)),u.x),u.y);}
+float vfbm(vec2 p){float s=0.0,a=0.5;for(int i=0;i<5;i++){s+=a*vnoise(p);p=mat2(1.6,1.2,-1.2,1.6)*p+3.1;a*=0.5;}return s;}
+vec2 vor(vec2 p){vec2 n=floor(p),f=fract(p);float md=8.0,id=0.0;
+  for(int j=-1;j<=1;j++)for(int i=-1;i<=1;i++){vec2 g=vec2(i,j);vec2 o=vec2(vh12(n+g),vh12(n+g+17.3));vec2 r=g+o-f;float d=dot(r,r);if(d<md){md=d;id=vh12(n+g+5.7);}}
+  return vec2(sqrt(md),id);}
+float terrH(sampler2D tex, vec2 xz){vec2 g=(xz+vec2(60.0,35.0))/vec2(120.0,70.0)*vec2(240.0,140.0);return texture2D(tex,(g+0.5)/vec2(241.0,141.0)).r;}
+`;
+const GLSL_WAVE=`
+vec3 waveGrad(vec2 p, float t, vec2 wind, float gust){
+  float ws=length(wind); vec2 d=ws>1e-3?wind/ws:vec2(1.0,0.0);
+  float A=0.03+0.22*ws*(0.6+0.6*gust);
+  vec2 d2=vec2(d.x*0.87-d.y*0.5,d.x*0.5+d.y*0.87), d3=vec2(d.x*0.87+d.y*0.5,-d.x*0.5+d.y*0.87);
+  float a1=dot(d,p)*0.45-t*2.2, a2=dot(d2,p)*0.7-t*2.8+1.3, a3=dot(d3,p)*1.1-t*3.5+2.1;
+  float h=A*(0.5*sin(a1)+0.3*sin(a2)+0.2*sin(a3));
+  vec2 g=A*(0.5*0.45*cos(a1)*d+0.3*0.7*cos(a2)*d2+0.2*1.1*cos(a3)*d3);
+  return vec3(h,g);
+}`;
+const GLSL_SKY=`
+vec3 moonDirV(){return normalize(vec3(-uSunDir.x,-uSunDir.y,uSunDir.z));}
+vec3 skyBase(vec3 d){
+  float day=uDay; float h=d.y;
+  vec3 zen=mix(vec3(0.003,0.005,0.014),vec3(0.05,0.15,0.46),day);
+  vec3 hor=mix(vec3(0.010,0.014,0.028),vec3(0.40,0.53,0.68),day);
+  float sunset=(1.0-smoothstep(0.02,0.38,uSunDir.y))*smoothstep(-0.2,0.02,uSunDir.y);
+  vec2 sxz=normalize(uSunDir.xz+1e-5), dxz=normalize(d.xz+1e-5);
+  float toward=pow(max(dot(sxz,dxz)*0.5+0.5,0.0),3.0);
+  hor=mix(hor,vec3(0.95,0.36,0.11),sunset*toward*0.85);
+  zen=mix(zen,vec3(0.09,0.10,0.28),sunset*0.4);
+  vec3 c=mix(zen,hor,pow(1.0-max(h,0.0),2.6));
+  if(h<0.0) c=mix(hor,hor*0.3+vec3(0.006),(1.0-smoothstep(-0.25,0.0,h)));
+  float lum=dot(c,vec3(0.2126,0.7152,0.0722));
+  c=mix(c,vec3(lum)*vec3(0.95,0.98,1.03)*mix(1.0,0.55,uCloud),uCloud*0.85);
+  float sd=max(dot(d,uSunDir),0.0);
+  float vis=(1.0-uCloud*0.93)*smoothstep(-0.04,0.02,uSunDir.y);
+  c+=uSunCol*(pow(sd,2400.0)*40.0+pow(sd,18.0)*0.3*day)*vis;
+  float md=max(dot(d,moonDirV()),0.0);
+  c+=vec3(0.75,0.82,1.0)*(pow(md,3500.0)*6.0+pow(md,40.0)*0.03)*(1.0-day)*(1.0-uCloud*0.9);
+  return c+uFlash*vec3(0.5,0.55,0.75);
+}`;
+
+// ============================================================ 材质补丁：水下吸收 / 焦散 / 湿润 / 苔藓 / 风摆
+const VERT_DECL=`
+uniform float uTime;uniform float uWL;uniform float uGust;uniform vec2 uWind;uniform vec2 uCurrent;
+uniform float uSway;uniform float uFloatTop;uniform float uGeoH;uniform float uGrowth;
+varying vec3 vWPos;varying vec3 vWNorm;
+#ifdef SWAY
+attribute float aH;attribute float aRand;
+#endif
+`;
+const VERT_PROJECT=`
+vec4 wp=vec4(transformed,1.0);
+#ifdef SWAY
+wp.y*=uGrowth;
+#endif
+#ifdef USE_INSTANCING
+wp=instanceMatrix*wp;
+#endif
+wp=modelMatrix*wp;
+#ifdef SWAY
+{
+  float Hs=length(instanceMatrix[1].xyz)*uGeoH*uGrowth;
+  float hh=aH;
+  float ph=aRand*6.2831+dot(wp.xz,vec2(0.09,0.06));
+  float uw=1.0-smoothstep(uWL-0.4,uWL+0.4,wp.y);
+  float fl=sin(uTime*2.1+ph)*0.5+sin(uTime*4.3+ph*1.7)*0.22;
+  vec2 airD=uWind*(0.5+0.9*uGust+0.35*fl)+vec2(-uWind.y,uWind.x)*fl*0.3+vec2(sin(uTime*0.9+ph),cos(uTime*0.8+ph))*0.03;
+  airD*=hh*hh*Hs*0.30;
+  vec2 wd=uCurrent+uWind*0.10+vec2(sin(uTime*0.55+ph),cos(uTime*0.43+ph*1.3))*0.35;
+  wd*=pow(hh,1.5)*Hs*0.16;
+  vec2 dsp=mix(airD,wd,uw)*uSway;
+  wp.xz+=dsp;
+  wp.y-=min(dot(dsp,dsp)/(2.0*max(Hs*hh,0.5)),Hs*hh*0.5);
+  if(uFloatTop>0.5){
+    float lim=uWL-0.25; float ex=wp.y-lim;
+    if(ex>0.0){vec2 fd=normalize(uCurrent+uWind*0.25+vec2(cos(ph),sin(ph))*0.7+1e-4);wp.y=lim+ex*0.02;wp.xz+=fd*ex*0.95;}
+  }
+}
+#endif
+vWPos=wp.xyz;
+#ifndef DEPTH_PASS
+{vec3 wn=objectNormal;
+#ifdef USE_INSTANCING
+wn=mat3(instanceMatrix)*wn;
+#endif
+vWNorm=normalize(mat3(modelMatrix)*wn);}
+#endif
+vec4 mvPosition=viewMatrix*wp;
+gl_Position=projectionMatrix*mvPosition;
+`;
+const FRAG_DECL=`
+uniform float uTime;uniform float uWL;uniform float uWet;uniform float uSunI;uniform float uDay;uniform float uTurb;
+uniform float uMoss;uniform float uDetail;uniform float uPlant;uniform float uWetGloss;
+uniform vec3 uSunDir;uniform vec3 uSunCol;uniform vec3 uWaterCol;
+varying vec3 vWPos;varying vec3 vWNorm;
+${GLSL_NOISE}
+float caustic(vec2 uv,float time){
+  vec2 p=mod(uv*6.28318,6.28318)-250.0; vec2 i=p; float c=1.0; float inten=0.005;
+  for(int n=0;n<4;n++){float t=time*(1.0-(3.5/float(n+1)));
+    i=p+vec2(cos(t-i.x)+sin(t+i.y),sin(t-i.y)+cos(t+i.x));
+    c+=1.0/length(vec2(p.x/(sin(i.x+t)/inten),p.y/(cos(i.y+t)/inten)));}
+  c/=4.0; c=1.17-pow(c,1.4); return pow(abs(c),8.0);
+}
+float wetL;
+`;
+const FRAG_COLOR=`
+wetL=clamp(max(uWet,1.0-smoothstep(uWL-0.2,uWL+1.8,vWPos.y)),0.0,1.0);
+if(uDetail>0.0){float dn=vnoise(vWPos.xz*2.7)*0.6+vnoise(vWPos.xz*9.1+vWPos.y)*0.4;diffuseColor.rgb*=mix(1.0,0.7+0.6*dn,uDetail);}
+if(uMoss>0.0){
+  float up=clamp(vWNorm.y,0.0,1.0);
+  float mn=vnoise(vWPos.xz*0.32+vWPos.y*0.21)*0.62+vnoise(vWPos.xz*1.7+vWPos.y*0.9)*0.38;
+  float above=smoothstep(uWL-0.3,uWL+1.5,vWPos.y);
+  float m=smoothstep(0.42,0.78,up*0.75+mn*0.62-0.12)*above*uMoss;
+  vec3 mossC=mix(vec3(0.030,0.075,0.012),vec3(0.10,0.20,0.025),mn);
+  mossC*=mix(1.0,1.35,vnoise(vWPos.xz*6.0+vWPos.y*3.0));
+  diffuseColor.rgb=mix(diffuseColor.rgb,mossC,m);
+  float alg=(1.0-above)*smoothstep(0.25,0.95,up*0.5+mn)*0.6;
+  diffuseColor.rgb=mix(diffuseColor.rgb,vec3(0.035,0.05,0.015),alg);
+}
+diffuseColor.rgb*=mix(1.0,0.6,wetL*uWetGloss);
+`;
+const FRAG_ROUGH=`
+roughnessFactor=mix(roughnessFactor,0.16,wetL*0.85*uWetGloss*smoothstep(uWL-0.6,uWL+0.2,vWPos.y));
+`;
+const FRAG_UW=`
+{
+  float uwd=uWL-vWPos.y;
+  if(uwd>0.0){
+    vec3 sig=vec3(0.060,0.024,0.032)*(1.0+uTurb*2.5);
+    outgoingLight*=exp(-sig*uwd*0.8);
+    float c=caustic(vWPos.xz*0.034-uSunDir.xz*uwd*0.02,uTime*0.5);
+    float facing=clamp(vWNorm.y*0.7+0.3,0.0,1.0);
+    outgoingLight+=diffuseColor.rgb*uSunCol*uSunI*c*2.4*facing*exp(-uwd*0.05)*smoothstep(0.0,0.6,uwd)*(1.0-uTurb*0.6);
+    vec3 rd=normalize(cameraPosition-vWPos);
+    float t=1e4;
+    if(rd.y>1e-4) t=min(t,uwd/rd.y);
+    float tx=rd.x>1e-5?(60.0-vWPos.x)/rd.x:(rd.x<-1e-5?(-60.0-vWPos.x)/rd.x:1e4);
+    float tz=rd.z>1e-5?(35.0-vWPos.z)/rd.z:(rd.z<-1e-5?(-35.0-vWPos.z)/rd.z:1e4);
+    t=max(min(t,min(tx,tz)),0.0);
+    vec3 T=exp(-sig*t);
+    vec3 scat=uWaterCol*(0.05+0.9*uSunI+0.25*uDay)*(1.0+uTurb*1.5);
+    outgoingLight=outgoingLight*T+scat*(1.0-T);
+  }
+  if(uPlant>0.0){vec3 vd=normalize(vWPos-cameraPosition);float tr=pow(max(dot(vd,uSunDir),0.0),3.0);
+    outgoingLight+=diffuseColor.rgb*uSunCol*uSunI*tr*0.6*uPlant*step(0.0,-uwd);}
+}
+`;
+function patch(mat,local,sway,depthPass=false){
+  mat.defines=Object.assign(mat.defines||{},sway?{SWAY:''}:{},depthPass?{DEPTH_PASS:''}:{});
+  mat.onBeforeCompile=(sh)=>{
+    Object.assign(sh.uniforms,G,local);
+    sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\n'+VERT_DECL).replace('#include <project_vertex>',VERT_PROJECT);
+    if(!depthPass){
+      sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\n'+FRAG_DECL)
+        .replace('#include <color_fragment>','#include <color_fragment>\n'+FRAG_COLOR)
+        .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\n'+FRAG_ROUGH)
+        .replace('#include <opaque_fragment>',FRAG_UW+'\n#include <opaque_fragment>');
+    }
+  };
+}
+function localU(o={}){return{uSway:{value:o.sway??1},uFloatTop:{value:o.floatTop?1:0},uGeoH:{value:o.geoH??1},uGrowth:o.growth||{value:1},
+  uMoss:{value:o.moss??0},uDetail:{value:o.detail??0},uPlant:{value:o.plant??0},uWetGloss:{value:o.wetGloss??1}}}
+function stdMat(o={},params={}){
+  const m=new THREE.MeshStandardMaterial(Object.assign({vertexColors:true,roughness:0.85,metalness:0},params));
+  patch(m,localU(o),false);return m;
+}
+function plantMat(o={},params={}){
+  const L=localU(Object.assign({plant:1,wetGloss:0.3},o));
+  const m=new THREE.MeshStandardMaterial(Object.assign({vertexColors:true,roughness:0.6,metalness:0,side:THREE.DoubleSide},params));
+  patch(m,L,true);
+  const d=new THREE.MeshDepthMaterial({depthPacking:THREE.RGBADepthPacking,side:THREE.DoubleSide});
+  patch(d,L,true,true);
+  return [m,d];
+}
+
+// ============================================================ 天空
+const SKY_U=Object.assign({},G);
+const sky=new THREE.Mesh(new THREE.SphereGeometry(1800,48,24),new THREE.ShaderMaterial({
+  uniforms:SKY_U,side:THREE.BackSide,depthWrite:false,fog:false,
+  vertexShader:`varying vec3 vDir;void main(){vDir=position;vec4 p=projectionMatrix*modelViewMatrix*vec4(position,1.0);gl_Position=p.xyww;}`,
+  fragmentShader:`uniform vec3 uSunDir;uniform vec3 uSunCol;uniform float uDay;uniform float uCloud;uniform float uFlash;uniform vec2 uWindOff;uniform float uTime;
+  varying vec3 vDir;${GLSL_NOISE}${GLSL_SKY}
+  void main(){vec3 d=normalize(vDir);vec3 c=skyBase(d);
+    if(d.y>0.0){
+      vec3 sq=floor(d*420.0);float st=step(0.9972,vh13(sq))*(1.0-uDay)*(1.0-uCloud)*smoothstep(0.0,0.2,d.y);
+      c+=st*vec3(1.0,0.97,0.9)*1.4*vh13(sq+3.0);
+      vec2 uv=d.xz/(d.y+0.12)*0.8+uWindOff*0.004;
+      float n=vfbm(uv*1.2)*0.7+vfbm(uv*3.3+4.0)*0.3;
+      float th=mix(0.70,0.26,uCloud);
+      float cov=smoothstep(th,th+0.2,n)*smoothstep(0.0,0.16,d.y);
+      float sunset=(1.0-smoothstep(0.02,0.35,uSunDir.y))*smoothstep(-0.2,0.02,uSunDir.y);
+      vec3 cc=mix(vec3(0.42,0.45,0.5)*(0.04+0.6*uDay),vec3(1.0)*(0.03+0.95*uDay),smoothstep(0.0,0.35,n-th));
+      cc*=mix(1.0,0.42,uCloud*uCloud);
+      cc+=uSunCol*sunset*0.35*uDay+uFlash*vec3(0.6,0.65,0.8);
+      c=mix(c,cc,cov*0.96);
+    }
+    gl_FragColor=vec4(c,1.0);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }`
+}));
+sky.renderOrder=-10;sky.frustumCulled=false;scene.add(sky);
+
+// ============================================================ 光照
+const sun=new THREE.DirectionalLight(0xffffff,3);
+sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
+const sc=sun.shadow.camera;sc.left=-95;sc.right=95;sc.top=95;sc.bottom=-95;sc.near=10;sc.far=600;
+sun.shadow.bias=-0.0004;sun.shadow.normalBias=0.4;
+sun.target.position.set(0,20,0);scene.add(sun,sun.target);
+const hemi=new THREE.HemisphereLight(0xbfd6ff,0x3a2e22,0.8);scene.add(hemi);
+
+// ============================================================ 地形网格
+const terrainGeo=new THREE.PlaneGeometry(2*TX,2*TZ,NX,NZ);terrainGeo.rotateX(-Math.PI/2);
+{
+  const p=terrainGeo.attributes.position,col=new Float32Array(p.count*3),c=new THREE.Color(),t=new THREE.Color();
+  const sand=C('#8a7a5c'),silt=C('#4d4232'),mud=C('#2a2017'),algae=C('#3b4a22'),moss=C('#3f5a1e'),soil=C('#3d2c1d'),litter=C('#6b4f2e'),moss2=C('#56702a');
+  for(let i=0;i<p.count;i++){
+    const x=p.getX(i),z=p.getZ(i),h=terrainH(x,z);p.setY(i,h);
+    const d=WL0-h;const n=fbm2(x*0.09,z*0.09,3),n2=fbm2(x*0.3+9,z*0.3,2);
+    if(d>1.2){c.copy(sand).lerp(silt,ss(4,16,d)*0.8+n*0.25);if(n2>0.25)c.lerp(algae,0.25);}
+    else if(d>-1.8){c.copy(mud).lerp(algae,ss(0.1,0.6,n2)*0.55);c.lerp(sand,ss(0.4,1.2,d)*0.5);}
+    else{c.copy(soil).lerp(moss,ss(-0.25,0.35,n));c.lerp(moss2,ss(0.3,0.7,n2)*0.5);c.lerp(litter,ss(0.2,0.6,-n2)*ss(-6,-14,d)*0.6);c.lerp(mud,ss(-3.5,-1.8,d)*0.6);}
+    col[i*3]=c.r;col[i*3+1]=c.g;col[i*3+2]=c.b;
+  }
+  terrainGeo.setAttribute('color',new THREE.BufferAttribute(col,3));
+  terrainGeo.computeVertexNormals();
+}
+const terrain=new THREE.Mesh(terrainGeo,stdMat({detail:1,moss:0},{roughness:0.95}));
+terrain.receiveShadow=true;terrain.castShadow=true;scene.add(terrain);
+
+// 地形高度纹理（水面 / 雾层用于判断水深）
+const heightTex=(()=>{const d=new Uint16Array(HG.length);for(let i=0;i<HG.length;i++)d[i]=THREE.DataUtils.toHalfFloat(HG[i]);
+  const t=new THREE.DataTexture(d,NX+1,NZ+1,THREE.RedFormat,THREE.HalfFloatType);t.minFilter=t.magFilter=THREE.LinearFilter;t.needsUpdate=true;return t;})();
+
+// 底床剖面（透过玻璃能看到的分层：陶粒排水层 / 隔离网 / 基质）
+function soilTexture(){
+  const cv=document.createElement('canvas');cv.width=cv.height=256;const g=cv.getContext('2d');
+  g.fillStyle='#4a3a2c';g.fillRect(0,0,256,256);
+  for(let i=0;i<5000;i++){const v=40+Math.random()*120|0;g.fillStyle=`rgba(${v},${v*0.82|0},${v*0.62|0},${0.25+Math.random()*0.4})`;g.fillRect(Math.random()*256,Math.random()*256,1+Math.random()*2,1+Math.random()*2);}
+  for(let i=0;i<55;i++){const x=Math.random()*256,y=Math.random()*256,r=3+Math.random()*7;const gr=g.createRadialGradient(x-r*0.3,y-r*0.3,r*0.1,x,y,r);
+    gr.addColorStop(0,'rgba(130,115,95,0.85)');gr.addColorStop(1,'rgba(50,38,30,0.85)');g.fillStyle=gr;g.beginPath();g.ellipse(x,y,r,r*0.8,Math.random()*3,0,7);g.fill();}
+  const t=new THREE.CanvasTexture(cv);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;return t;
+}
+{
+  const tex=soilTexture(),geos=[];
+  const walls=[[-TX,TZ,TX,TZ,0,1],[TX,-TZ,-TX,-TZ,0,-1],[-TX,-TZ,-TX,TZ,-1,0],[TX,TZ,TX,-TZ,1,0]];
+  const clay=C('#c07a48'),soilC=C('#ffffff'),sandC=C('#e8d7b0'),net=C('#151515');
+  for(const [x0,z0,x1,z1,nx,nz] of walls){
+    const L=Math.hypot(x1-x0,z1-z0),NS=Math.round(L*1.5),NV=36,pos=[],col=[],uv=[],idx=[];
+    for(let i=0;i<=NS;i++){const t=i/NS,x=lerp(x0,x1,t),z=lerp(z0,z1,t),top=hAt(x-nx*0.01,z-nz*0.01);
+      for(let j=0;j<=NV;j++){const y=top*j/NV;pos.push(x+nx*0.02,y,z+nz*0.02);uv.push(t*L/22,y/22);
+        const c=new THREE.Color();if(y<5)c.copy(clay);else if(y<5.6)c.copy(net);else{c.copy(soilC);if(top<WL0-1)c.lerp(sandC,ss(top-6,top-1.5,y));if(top>WL0+1)c.multiplyScalar(lerp(1,0.55,ss(top-3,top,y)));}
+        col.push(c.r,c.g,c.b);}}
+    for(let i=0;i<NS;i++)for(let j=0;j<NV;j++){const a=i*(NV+1)+j,b=a+NV+1;idx.push(a,b,a+1,b,b+1,a+1);}
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
+    g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();geos.push(g);
+  }
+  const m=new THREE.Mesh(mergeGeometries(geos),stdMat({wetGloss:0.5},{map:tex,roughness:0.9,side:THREE.DoubleSide}));
+  m.receiveShadow=true;scene.add(m);
+}
+
+// 背景板：软木 / 岩壁
+{
+  const g=new THREE.PlaneGeometry(2*TX,TH,150,100);g.translate(0,TH/2,0);
+  const p=g.attributes.position,col=new Float32Array(p.count*3),c=new THREE.Color(),cork=C('#3a2a1e'),cork2=C('#5c4430'),dark=C('#1c140e'),mosB=C('#3a5418');
+  for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i);
+    const n=fbm2(x*0.05,y*0.05,5),r=Math.abs(fbm2(x*0.11+5,y*0.03,3));
+    p.setZ(i,(n*0.5+0.5)*5.5+r*2.5);
+    c.copy(cork).lerp(cork2,ss(-0.2,0.5,n)).lerp(dark,ss(0.15,0.0,r)*0.6);const mo=fbm2(x*0.04+11,y*0.05,4);if(y>WL0+2)c.lerp(mosB,ss(0.12,0.32,mo)*0.9*ss(WL0+2,WL0+8,y));col.set([c.r,c.g,c.b],i*3);}
+  g.setAttribute('color',new THREE.BufferAttribute(col,3));g.computeVertexNormals();
+  const m=new THREE.Mesh(g,stdMat({detail:0.8,moss:0},{roughness:0.95}));m.position.z=-TZ+0.3;m.receiveShadow=true;scene.add(m);
+}
+
+// ============================================================ 几何体生成器
+function acc(){return{pos:[],col:[],ah:[],idx:[]}}
+function geoFrom(A){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(A.pos,3));
+  g.setAttribute('color',new THREE.Float32BufferAttribute(A.col,3));g.setAttribute('aH',new THREE.Float32BufferAttribute(A.ah,1));g.setIndex(A.idx);g.computeVertexNormals();return g;}
+function vtx(A,p,c,h){A.pos.push(p.x,p.y,p.z);A.col.push(c.r,c.g,c.b);A.ah.push(h);return A.pos.length/3-1;}
+// 叶片：base 起点，dir 方向，side 横向
+function addLeaf(A,base,dir,side,len,wid,c0,c1,h0,h1,segs=4,curl=0.12,shape=0.8){
+  const up=new V3().crossVectors(side,dir).normalize(),rows=[],c=new THREE.Color();
+  for(let i=0;i<=segs;i++){const t=i/segs;const w=wid*Math.pow(Math.sin(Math.PI*clamp(t*0.96+0.02,0,1)),shape)*0.5;
+    const p=base.clone().addScaledVector(dir,len*t).addScaledVector(up,-curl*len*t*t);c.copy(c0).lerp(c1,t);const h=lerp(h0,h1,t);
+    rows.push([vtx(A,p.clone().addScaledVector(side,-w),c,h),vtx(A,p.clone().addScaledVector(up,wid*0.08),c,h),vtx(A,p.clone().addScaledVector(side,w),c,h)]);}
+  for(let i=0;i<segs;i++){const [l0,c0_,r0]=rows[i],[l1,c1_,r1]=rows[i+1];A.idx.push(l0,c0_,l1,c0_,c1_,l1,c0_,r0,c1_,r0,r1,c1_);}
+}
+// 细长叶（苦草 / 芦苇 / 莎草 / 牛毛毡）
+function bladeGeo({w=0.6,segs=8,bend=[0,0],droop=0,twist=0,c0,c1,tip=0.25}){
+  const A=acc(),c=new THREE.Color();
+  for(let i=0;i<=segs;i++){const t=i/segs;
+    const ww=Math.max(w*(t>1-tip?(1-t)/tip:1)*(0.55+0.45*Math.min(1,t*6)),0.0004);
+    const cx=bend[0]*t*t,cz=bend[1]*t*t,a=twist*t,ox=Math.cos(a)*ww*0.5,oz=Math.sin(a)*ww*0.5,y=t-droop*t*t;
+    c.copy(c0).lerp(c1,t);vtx(A,new V3(cx-ox,y,cz-oz),c,t);vtx(A,new V3(cx+ox,y,cz+oz),c,t);
+    if(i<segs){const k=i*2;A.idx.push(k,k+1,k+2,k+1,k+3,k+2);}}
+  return geoFrom(A);
+}
+// 有茎草（红宫廷 / 丁香蓼）
+function stemPlantGeo({H=14,nodes=20,leafL=1.1,leafW=0.35,c0,c1,stemC,up=0.7,shape=0.8}){
+  const A=acc(),segs=8,sr=0.09;
+  for(let s=0;s<=segs;s++){const y=s/segs*H,bx=Math.sin(y*0.25)*0.35;for(let k=0;k<4;k++){const a=k/4*Math.PI*2;vtx(A,new V3(bx+Math.cos(a)*sr,y,Math.sin(a)*sr),stemC,y/H);}}
+  for(let s=0;s<segs;s++)for(let k=0;k<4;k++){const a=s*4+k,b=s*4+(k+1)%4;A.idx.push(a,b,a+4,b,b+4,a+4);}
+  const cc=new THREE.Color(),cd=new THREE.Color();
+  for(let n=0;n<nodes;n++){const t=(n+0.6)/nodes,y=t*H*0.98,bx=Math.sin(y*0.25)*0.35;
+    const L=leafL*(0.75+0.35*Math.sin(t*Math.PI))*(t>0.85?lerp(1,0.55,(t-0.85)/0.15):1);
+    for(let p=0;p<2;p++){const ang=n*Math.PI/2+p*Math.PI+rr(-0.2,0.2);const dh=new V3(Math.cos(ang),0,Math.sin(ang));
+      const el=lerp(up*0.6,up*1.4,t);const dir=dh.clone().multiplyScalar(Math.cos(el)).add(new V3(0,Math.sin(el),0)).normalize();
+      const side=new V3(-dh.z,0,dh.x);cc.copy(c0).lerp(c1,Math.pow(t,1.6));cd.copy(cc).multiplyScalar(1.15);
+      addLeaf(A,new V3(bx,y,0),dir,side,L,leafW,cc,cd,t,t,2,-0.05,shape);}}
+  return geoFrom(A);
+}
+// 蕨类叶片
+function frondGeo(L=12,n=22){
+  const A=acc(),rach=t=>new V3(L*0.8*t,L*(0.62*Math.sin(t*Math.PI*0.62)-0.22*t*t),0);
+  const g0=C('#2f5a1a'),g1=C('#6d9a2c'),stem=C('#3b3a1a');
+  for(let i=0;i<=12;i++){const t=i/12,p=rach(t),w=0.14*(1-t*0.8);vtx(A,p.clone().add(new V3(0,0,-w)),stem,t);vtx(A,p.clone().add(new V3(0,0,w)),stem,t);
+    if(i<12){const k=i*2;A.idx.push(k,k+1,k+2,k+1,k+3,k+2);}}
+  for(let k=0;k<n;k++){const t=0.12+0.86*k/(n-1),p=rach(t),tan=rach(t+0.01).sub(p).normalize();
+    const pl=L*0.24*Math.sin(Math.PI*Math.min(1,(t-0.04)/0.99))*(1-t*0.5);
+    for(const sd of[-1,1]){const d=new V3(0,-0.25,sd).addScaledVector(tan,0.45).normalize();
+      const c0=g0.clone().lerp(g1,t*0.6+rand()*0.2),c1=c0.clone().multiplyScalar(1.25);
+      addLeaf(A,p,d,tan.clone().multiplyScalar(sd),pl,pl*0.28,c0,c1,t,t+0.04,2,0.15,0.9);}}
+  return geoFrom(A);
+}
+// 莫丝 / 苔藓团
+function mossTuftGeo(){
+  const g=new THREE.IcosahedronGeometry(1,2).toNonIndexed(),p=g.attributes.position,col=new Float32Array(p.count*3),ah=new Float32Array(p.count),c=new THREE.Color(),a=C('#2a4a12'),b=C('#6a8a28');
+  for(let i=0;i<p.count;i++){const v=new V3().fromBufferAttribute(p,i);const n=snoise(v.x*2.1+v.z,v.y*2.3+v.z*1.7);v.multiplyScalar(1+n*0.28);v.y=v.y*0.5+0.12;p.setXYZ(i,v.x,v.y,v.z);
+    c.copy(a).lerp(b,clamp(0.5+n*0.8+v.y*0.6,0,1));col.set([c.r,c.g,c.b],i*3);}
+  g.setAttribute('color',new THREE.BufferAttribute(col,3));g.setAttribute('aH',new THREE.BufferAttribute(ah,1));g.deleteAttribute('normal');g.deleteAttribute('uv');const m=mergeVertices(g,1e-4);m.computeVertexNormals();return m;
+}
+
+// ============================================================ 枯木（程序化分叉 + 树皮沟壑）
+function tubeGeo(curve,r0,r1,seed,cA,cB,rough=1,capStart=true,capEnd=true){
+  const len=curve.getLength(),segs=Math.max(8,Math.round(len*1.4)),radial=clamp(Math.round(5+r0*3),6,18);
+  const fr=curve.computeFrenetFrames(segs,false),pos=[],col=[],idx=[],c=new THREE.Color();
+  const ring=[];
+  for(let i=0;i<=segs;i++){const t=i/segs,p=curve.getPointAt(t),N=fr.normals[i],B=fr.binormals[i];
+    let r=lerp(r0,r1,Math.pow(t,0.85))*(1+0.13*snoise(t*len*0.15+seed,seed*1.3)*rough);
+    if(t<0.08)r*=1+(0.08-t)*3*rough;
+    ring.push(p);
+    for(let j=0;j<=radial;j++){const a=j/radial*Math.PI*2,ca=Math.cos(a),sa=Math.sin(a);
+      const ridge=1+0.07*Math.sin(a*9+snoise(t*len*0.4+seed,ca*1.3+sa)*2.6)*rough+0.09*snoise(t*len*0.25+seed*2,ca*1.6+sa*1.1)*rough;
+      const rr_=r*ridge;pos.push(p.x+(N.x*ca+B.x*sa)*rr_,p.y+(N.y*ca+B.y*sa)*rr_,p.z+(N.z*ca+B.z*sa)*rr_);
+      const g=0.5+0.5*snoise(t*len*0.5+seed,ca*2+sa*2.2);const fur=0.5+0.5*Math.sin(a*9+snoise(t*len*0.4+seed,ca*1.3+sa)*2.6);
+      c.copy(cA).lerp(cB,clamp(g*0.8+fur*0.3,0,1));col.push(c.r,c.g,c.b);}}
+  for(let i=0;i<segs;i++)for(let j=0;j<radial;j++){const a=i*(radial+1)+j,b=a+radial+1;idx.push(a,b,a+1,b,b+1,a+1);}
+  const cap=(i,flip)=>{const p=ring[i],ci=pos.length/3;pos.push(p.x,p.y,p.z);c.copy(cA).lerp(cB,0.9);col.push(c.r,c.g,c.b);
+    for(let j=0;j<radial;j++){const a=i*(radial+1)+j;flip?idx.push(ci,a+1,a):idx.push(ci,a,a+1);}};
+  if(capStart)cap(0,true);if(capEnd)cap(segs,false);
+  let g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.setIndex(idx);
+  g=mergeVertices(g,1e-3);g.computeVertexNormals();return g;
+}
+const woodGeos=[];
+function grow(start,dir,len,r0,depth,o){
+  const pts=[start.clone()];let p=start.clone(),d=dir.clone().normalize();const n=6;
+  for(let k=1;k<=n;k++){d.add(new V3(rr(-1,1),rr(-1,1),rr(-1,1)).multiplyScalar(o.wiggle)).add(o.bias).normalize();p=p.clone().addScaledVector(d,len/n);
+    if(o.floor){const fh=hAt(p.x,p.z)+r0*0.2;if(p.y<fh){p.y=fh;d.y=Math.abs(d.y)*0.3;}}pts.push(p);}
+  const curve=new THREE.CatmullRomCurve3(pts);const r1=Math.max(r0*o.taper,0.12);
+  woodGeos.push(tubeGeo(curve,r0,r1,rand()*100,o.cA,o.cB,o.rough??1,false,true));
+  if(depth>0){const nc=o.kids??2;for(let c=0;c<nc;c++){const t=rr(0.3,0.85),pp=curve.getPointAt(t),tan=curve.getTangentAt(t);
+    const perp=new V3(rr(-1,1),rr(-0.2,1),rr(-1,1)).normalize();const cd=tan.clone().multiplyScalar(0.6).add(perp.multiplyScalar(0.9)).add(o.bias).normalize();
+    grow(pp,cd,len*rr(0.45,0.65),lerp(r0,r1,t)*0.55,depth-1,o);}}
+  return curve;
+}
+const WOOD_A=C('#4a3b2e'),WOOD_B=C('#7d6b57'),DRIFT_A=C('#6e6252'),DRIFT_B=C('#bcae99');
+// 1) 倒伏原木：从陆地斜伸入水
+{
+  const pts=[];for(let i=0;i<=8;i++){const t=i/8,x=lerp(-50,20,t),z=lerp(-20,13,t)+Math.sin(t*3)*3;const r=lerp(4.6,3.0,t);pts.push(new V3(x,0,z));pts[i].userData=r;}
+  const ys=pts.map(p=>{let m=-1e9;for(let a=0;a<6;a++){const ang=a/6*Math.PI*2;m=Math.max(m,hAt(p.x+Math.cos(ang)*3,p.z+Math.sin(ang)*3));}return m+p.userData*0.55;});
+  pts.forEach((p,i)=>p.y=(ys[Math.max(0,i-1)]+ys[i]*2+ys[Math.min(8,i+1)])/4);
+  const curve=new THREE.CatmullRomCurve3(pts);woodGeos.push(tubeGeo(curve,4.6,3.0,11,WOOD_A,WOOD_B,1.1,true,true));
+  const o={wiggle:0.25,bias:new V3(0,0.15,0),taper:0.3,cA:WOOD_A,cB:WOOD_B,kids:1};
+  for(const [t,dx,dy,dz,L] of [[0.35,0.3,1,0.5,16],[0.55,-0.2,1,-0.6,12],[0.72,0.5,0.8,0.7,15],[0.9,0.4,0.6,-0.6,14]]){
+    const p=curve.getPointAt(t);grow(p,new V3(dx,dy,dz),L,lerp(4.4,3,t)*0.42,1,o);}
+}
+// 2) 沉木（蜘蛛木）：水中向上分叉，部分探出水面
+{
+  const base=new V3(34,hAt(34,-14)-0.8,-14);
+  const o={wiggle:0.35,bias:new V3(0,0.12,0),taper:0.35,cA:DRIFT_A,cB:DRIFT_B,kids:2,rough:0.7};
+  for(let k=0;k<5;k++){const a=k/5*Math.PI*2+0.4;grow(base,new V3(Math.cos(a)*0.7,1,Math.sin(a)*0.5),rr(24,36),rr(1.4,2.2),2,o);}
+  const ro={wiggle:0.3,bias:new V3(0,-0.15,0),taper:0.25,cA:DRIFT_A,cB:DRIFT_B,kids:0,floor:true,rough:0.7};
+  for(let k=0;k<4;k++){const a=k/4*Math.PI*2;grow(base.clone().add(new V3(0,1,0)),new V3(Math.cos(a),-0.3,Math.sin(a)),rr(10,16),1.6,0,ro);}
+}
+// 3) 树桩
+{
+  const bx=-44,bz=-23,by=hAt(bx,bz)-2;
+  const pts=[new V3(bx,by,bz),new V3(bx+0.5,by+6,bz+0.3),new V3(bx+0.3,by+13,bz-0.2),new V3(bx+1,by+17,bz)];
+  woodGeos.push(tubeGeo(new THREE.CatmullRomCurve3(pts),6.5,5.2,33,WOOD_A,WOOD_B,1.4,false,true));
+  const o={wiggle:0.25,bias:new V3(0,-0.12,0),taper:0.18,cA:WOOD_A,cB:WOOD_B,kids:1,floor:true};
+  for(let k=0;k<6;k++){const a=k/6*Math.PI*2+0.3;grow(new V3(bx+Math.cos(a)*3,by+4,bz+Math.sin(a)*3),new V3(Math.cos(a),-0.35,Math.sin(a)),rr(10,16),2.6,1,o);}
+  grow(new V3(bx+1,by+15,bz),new V3(0.6,1,0.2),9,1.6,0,{wiggle:0.2,bias:new V3(0,0.1,0),taper:0.3,cA:WOOD_A,cB:WOOD_B,kids:0});
+}
+// 4) 散落枯枝
+for(let k=0;k<14;k++){const x=rr(-55,45),z=rr(-30,30),y=hAt(x,z)+0.4;
+  grow(new V3(x,y,z),new V3(rr(-1,1),0.05,rr(-1,1)),rr(6,14),rr(0.35,0.7),1,{wiggle:0.2,bias:new V3(0,-0.02,0),taper:0.4,cA:WOOD_A,cB:DRIFT_B,kids:1,floor:true,rough:0.6});}
+const woodGeo=mergeGeometries(woodGeos);
+const wood=new THREE.Mesh(woodGeo,stdMat({moss:1,detail:0.5,wetGloss:1},{roughness:0.92}));
+wood.castShadow=wood.receiveShadow=true;scene.add(wood);
+
+// 石头
+{
+  const geos=[];
+  for(const [x,z,s] of [[-30,-28,6],[-52,5,5],[-20,-10,3.5],[8,-26,5],[48,20,4],[25,26,3],[-8,20,2.5]]){
+    const g=new THREE.IcosahedronGeometry(1,3),p=g.attributes.position,col=new Float32Array(p.count*3),c=new THREE.Color(),a=C('#4a4a46'),b=C('#7a7a72'),l=C('#5c6a3a');const sd=rand()*50;
+    for(let i=0;i<p.count;i++){const v=new V3().fromBufferAttribute(p,i);const n=fbm2(v.x*1.2+sd,v.y*1.2+v.z*0.8,4);v.multiplyScalar(1+n*0.35);v.x*=s*1.2;v.y*=s*0.7;v.z*=s;
+      v.add(new V3(x,hAt(x,z)+s*0.15,z));p.setXYZ(i,v.x,v.y,v.z);c.copy(a).lerp(b,clamp(0.5+n*1.5,0,1));if(fbm2(v.x*0.5,v.z*0.5,2)>0.3)c.lerp(l,0.5);col.set([c.r,c.g,c.b],i*3);}
+    g.setAttribute('color',new THREE.BufferAttribute(col,3));g.deleteAttribute('uv');g.deleteAttribute('normal');geos.push(mergeVertices(g));}
+  const g=mergeGeometries(geos);g.computeVertexNormals();
+  const m=new THREE.Mesh(g,stdMat({moss:0.7,detail:0.6},{roughness:0.8}));m.castShadow=m.receiveShadow=true;scene.add(m);
+}
+
+// ============================================================ 植物摆放
+function scatter(count,tries,test){const out=[];for(let k=0;k<tries&&out.length<count;k++){const x=rr(-TX+1.5,TX-1.5),z=rr(-TZ+1.5,TZ-1.5),h=hAt(x,z);if(test(x,z,h,WL0-h))out.push({x,z,h,r:rand()});}return out;}
+function clusters(nC,per,spread,cTest,test){const cs=scatter(nC,6000,cTest),out=[];
+  for(const c of cs){const n=Math.round(per*rr(0.6,1.4));for(let k=0;k<n*3&&k<n*6;k++){const x=c.x+gauss()*spread,z=c.z+gauss()*spread;
+    if(Math.abs(x)>TX-1||Math.abs(z)>TZ-1)continue;const h=hAt(x,z);if(test(x,z,h,WL0-h)){out.push({x,z,h,r:rand(),c});if(out.length>=cs.length*per*1.4)break;}}}
+  return out;}
+const dummy=new THREE.Object3D(),tmpC=new THREE.Color();
+function inst(geo,mats,list,setup,{cast=true,receive=true}={}){
+  const [mat,depth]=Array.isArray(mats)?mats:[mats,null];
+  const m=new THREE.InstancedMesh(geo,mat,Math.max(list.length,1));m.count=list.length;
+  const rnd=new Float32Array(Math.max(list.length,1));
+  list.forEach((it,i)=>{dummy.position.set(it.x,it.h,it.z);dummy.rotation.set(0,rand()*Math.PI*2,0);dummy.scale.set(1,1,1);tmpC.set(0xffffff);
+    setup(it,dummy,tmpC,i);dummy.updateMatrix();m.setMatrixAt(i,dummy.matrix);m.setColorAt(i,tmpC);rnd[i]=it.r;});
+  geo.setAttribute('aRand',new THREE.InstancedBufferAttribute(rnd,1));
+  m.castShadow=cast;m.receiveShadow=receive;if(depth)m.customDepthMaterial=depth;m.frustumCulled=false;scene.add(m);return m;
+}
+const growthU={value:1};
+const pearlPts=[];   // 光合作用出泡点
+
+// 牛毛毡（浅水草坪）
+{
+  const g=bladeGeo({w:0.13,segs:3,c0:C('#2d5a18'),c1:C('#8fbf3a'),tip:0.5});
+  const L=clusters(16,340,5.5,(x,z,h,d)=>d>1&&d<8,(x,z,h,d)=>d>0.3&&d<10);
+  inst(g,plantMat({growth:growthU,sway:0.9}),L,(it,o,c)=>{o.scale.set(1,rr(2.2,4.8),1);o.rotation.x=rr(-0.25,0.25);o.rotation.z=rr(-0.25,0.25);c.setScalar(rr(0.75,1.15));},{cast:false});
+}
+// 苦草（长带状，超出水深的部分会平铺在水面）
+{
+  const g=bladeGeo({w:0.6,segs:14,twist:1.6,bend:[0.6,0],c0:C('#1e3a10'),c1:C('#5f8a2c'),tip:0.06});
+  const L=clusters(8,38,4.2,(x,z,h,d)=>d>9&&d<19&&z<8,(x,z,h,d)=>d>7&&d<20);
+  inst(g,plantMat({growth:growthU,floatTop:true,sway:1.2},{roughness:0.45}),L,(it,o,c)=>{const H=rr(14,30);o.scale.set(1,H,1);o.rotation.x=rr(-0.12,0.12);o.rotation.z=rr(-0.12,0.12);c.setRGB(rr(0.8,1.1),rr(0.9,1.1),rr(0.7,1));
+    if(rand()<0.3)pearlPts.push(new V3(it.x,it.h+Math.min(H*0.8,WL0-it.h-1),it.z));});
+}
+// 红宫廷 / 丁香蓼（有茎草）
+{
+  const g1=stemPlantGeo({H:14,nodes:22,leafL:1.0,leafW:0.28,c0:C('#3d6a1c'),c1:C('#d0503a'),stemC:C('#6a3a24'),up:0.75,shape:0.7});
+  const L1=clusters(5,24,2.2,(x,z,h,d)=>d>7&&d<16,(x,z,h,d)=>d>6&&d<18);
+  inst(g1,plantMat({growth:growthU,geoH:14}),L1,(it,o,c)=>{const s=Math.min(rr(0.8,1.25),(WL0-it.h-1.5)/14);o.scale.set(Math.max(s,0.6),s,Math.max(s,0.6));o.rotation.x=rr(-0.15,0.15);o.rotation.z=rr(-0.15,0.15);
+    if(rand()<0.5)pearlPts.push(new V3(it.x,it.h+12*s,it.z));});
+  const g2=stemPlantGeo({H:14,nodes:10,leafL:2.0,leafW:0.9,c0:C('#3f6a22'),c1:C('#b8603a'),stemC:C('#5a3020'),up:0.3,shape:0.95});
+  const L2=clusters(3,16,2,(x,z,h,d)=>d>5&&d<13,(x,z,h,d)=>d>4&&d<15);
+  inst(g2,plantMat({growth:growthU,geoH:14}),L2,(it,o,c)=>{const s=Math.min(rr(0.7,1.1),(WL0-it.h-1.5)/14);o.scale.set(Math.max(s,0.55),s,Math.max(s,0.55));o.rotation.x=rr(-0.15,0.15);o.rotation.z=rr(-0.15,0.15);
+    if(rand()<0.5)pearlPts.push(new V3(it.x,it.h+11*s,it.z));});
+}
+// 水榕：附生在水下沉木上
+{
+  const A=acc(),c0=C('#173a12'),c1=C('#2f6a22');
+  for(let k=0;k<5;k++){const a=k/5*Math.PI*2+rr(-0.3,0.3);const el=rr(0.35,0.8);const dh=new V3(Math.cos(a),0,Math.sin(a));
+    const pet=dh.clone().multiplyScalar(Math.cos(el)).add(new V3(0,Math.sin(el),0)).normalize();const pe=pet.clone().multiplyScalar(1.4);
+    addLeaf(A,new V3(),pet,new V3(-dh.z,0,dh.x),1.4,0.12,c0,c0,0,0.3,1,0,0.2);
+    addLeaf(A,pe,pet.clone().add(new V3(0,-0.25,0)).normalize(),new V3(-dh.z,0,dh.x),rr(3.2,4.2),rr(1.6,2.0),c0,c1,0.3,1,5,0.08,0.75);}
+  const g=geoFrom(A);
+  const p=woodGeo.attributes.position,nm=woodGeo.attributes.normal,L=[];
+  for(let t=0;t<20000&&L.length<40;t++){const i=Math.floor(rand()*p.count);const y=p.getY(i);
+    if(nm.getY(i)>0.55&&y<WL0-2&&y>WL0-17){L.push({x:p.getX(i),h:y-0.2,z:p.getZ(i),r:rand()});}}
+  inst(g,plantMat({growth:growthU,geoH:4,sway:0.5},{roughness:0.35}),L,(it,o)=>{o.scale.setScalar(rr(0.7,1.2));});
+  L.forEach(it=>{if(rand()<0.5)pearlPts.push(new V3(it.x,it.h+2,it.z));});
+}
+// 香蒲（挺水）：茎 + 蒲棒 共享实例矩阵
+{
+  const L=clusters(6,7,2.4,(x,z,h,d)=>d>-1.2&&d<2.2&&Math.abs(z)<28,(x,z,h,d)=>d>-1.8&&d<3);
+  const stalk=new THREE.CylinderGeometry(0.1,0.17,1,5,8).translate(0,0.5,0);
+  const head=new THREE.CylinderGeometry(0.55,0.55,0.13,10,2).translate(0,0.85,0);
+  for(const g of [stalk,head]){const p=g.attributes.position,col=new Float32Array(p.count*3),ah=new Float32Array(p.count);
+    for(let i=0;i<p.count;i++){const y=p.getY(i);ah[i]=y;const c=g===head?C('#4a2c18'):C('#5a6a2a').lerp(C('#8a8a46'),y);col.set([c.r,c.g,c.b],i*3);}
+    g.setAttribute('color',new THREE.BufferAttribute(col,3));g.setAttribute('aH',new THREE.BufferAttribute(ah,1));}
+  const mats=plantMat({sway:1});const Hs=L.map(()=>rr(26,44));
+  const setup=(it,o,c,i)=>{o.scale.set(1,Hs[i],1);o.rotation.x=rr(-0.06,0.06);o.rotation.z=rr(-0.06,0.06);};
+  const r0=rand;let seedState=0;const rots=L.map(()=>[rr(-0.06,0.06),rr(-0.06,0.06),rr(0,6.28)]);
+  const set2=(it,o,c,i)=>{o.scale.set(1,Hs[i],1);o.rotation.set(rots[i][0],rots[i][2],rots[i][1]);};
+  inst(stalk,mats,L,set2);
+  const heads=L.filter((_,i)=>i%3!==0);const hIdx=L.map((_,i)=>i).filter(i=>i%3!==0);
+  inst(head,plantMat({sway:1},{roughness:0.9}),heads,(it,o,c,k)=>set2(it,o,c,hIdx[k]));
+  // 香蒲叶 / 芦苇叶
+  const lg=bladeGeo({w:0.62,segs:10,bend:[3.5,0],twist:0.6,c0:C('#3a5a1e'),c1:C('#9aa04a'),tip:0.15});
+  const LL=[];L.forEach(it=>{for(let k=0;k<3;k++)LL.push({x:it.x+gauss()*0.8,z:it.z+gauss()*0.8,h:it.h,r:rand()});});
+  inst(lg,plantMat({sway:1.1}),LL,(it,o,c)=>{o.scale.set(1,rr(20,36),1);o.rotation.x=rr(-0.1,0.1);o.rotation.z=rr(-0.15,0.15);c.setScalar(rr(0.8,1.1));});
+}
+// 莎草丛（湿地）
+{
+  const g=bladeGeo({w:0.035,segs:8,bend:[0.35,0],droop:0.12,c0:C('#3a5a1a'),c1:C('#a0a848'),tip:0.3});
+  const centers=scatter(26,8000,(x,z,h,d)=>d>-3.5&&d<1.0);const L=[];
+  centers.forEach(c=>{const n=Math.round(rr(14,24)),H=rr(9,19);for(let k=0;k<n;k++)L.push({x:c.x+gauss()*0.5,z:c.z+gauss()*0.5,h:c.h,r:rand(),H:H*rr(0.7,1.1),a:k/n*6.28+rr(-0.3,0.3)});});
+  inst(g,plantMat({geoH:1,sway:1}),L,(it,o,c)=>{o.scale.setScalar(it.H);o.rotation.set(0,it.a,rr(0.05,0.35));c.setScalar(rr(0.75,1.15));});
+}
+// 陆地杂草
+{
+  const g=bladeGeo({w:0.05,segs:5,bend:[0.25,0],droop:0.08,c0:C('#2e4a16'),c1:C('#8aa040'),tip:0.35});
+  const L=clusters(30,40,3,(x,z,h,d)=>d<-2.5,(x,z,h,d)=>d<-2);
+  inst(g,plantMat({sway:1}),L,(it,o,c)=>{o.scale.setScalar(rr(3,7));o.rotation.z=rr(0,0.5);c.setScalar(rr(0.7,1.2));},{cast:false});
+}
+// 蕨类
+{
+  const g=frondGeo(12,22);const centers=scatter(9,8000,(x,z,h,d)=>d<-5&&!(Math.hypot(x+44,z+23)<9)),L=[];
+  centers.forEach(c=>{const n=Math.round(rr(6,10)),s=rr(0.7,1.25);for(let k=0;k<n;k++)L.push({x:c.x,z:c.z,h:c.h,r:rand(),s,a:k/n*6.28+rr(-0.25,0.25)});});
+  inst(g,plantMat({geoH:7,sway:0.9},{roughness:0.55}),L,(it,o,c)=>{o.scale.setScalar(it.s*rr(0.75,1.1));o.rotation.set(0,it.a,rr(-0.25,0.15));c.setScalar(rr(0.8,1.1));});
+}
+// 苔藓团：陆地 + 枯木朝上的表面
+{
+  const g=mossTuftGeo();
+  const L=scatter(1100,30000,(x,z,h,d)=>d<-1.2&&fbm2(x*0.05,z*0.05,3)>-0.1);
+  const p=woodGeo.attributes.position,nm=woodGeo.attributes.normal;
+  for(let t=0;t<40000&&L.length<1750;t++){const i=Math.floor(rand()*p.count);if(nm.getY(i)>0.7&&p.getY(i)>WL0+0.6&&p.getX(i)<12)L.push({x:p.getX(i),h:p.getY(i)-0.15,z:p.getZ(i),r:rand(),w:1});}
+  inst(g,stdMat({wetGloss:0.4,detail:0.5},{roughness:0.95}),L,(it,o,c)=>{const s=it.w?rr(0.4,1.0):rr(0.5,1.6);o.scale.set(s*rr(0.8,1.3),s,s*rr(0.8,1.3));c.setScalar(rr(0.7,1.25));},{cast:false});
+}
+// 落叶（陆地 / 湿地 / 水底的榄仁叶）
+{
+  const A=acc();addLeaf(A,new V3(-1.6,0,0),new V3(1,0,0),new V3(0,0,1),3.2,1.7,C('#ffffff'),C('#ffffff'),0,0,4,-0.05,0.8);const g=geoFrom(A);
+  const L=scatter(520,20000,(x,z,h,d)=>d<14);const cols=[C('#6a3a1a'),C('#8a5a26'),C('#4a2a14'),C('#9a6a30'),C('#5a4a26')];
+  inst(g,stdMat({wetGloss:0.8},{roughness:0.8,side:THREE.DoubleSide}),L,(it,o,c)=>{o.position.y+=0.08;o.rotation.set(rr(-0.2,0.2),rand()*6.28,rr(-0.2,0.2));o.scale.setScalar(rr(0.5,1.2));c.copy(cols[Math.floor(rand()*cols.length)]);if(it.h<WL0)c.multiplyScalar(0.6);},{cast:false});
+}
+
+// ============================================================ 水面
+const MAXDROPS=40;
+const dropsU=[];for(let i=0;i<MAXDROPS;i++)dropsU.push(new THREE.Vector4(0,0,-100,0));
+const waterMat=new THREE.ShaderMaterial({
+  uniforms:Object.assign({},G,{uHeight:{value:heightTex},uDrops:{value:dropsU}},THREE.UniformsLib.fog),
+  transparent:true,depthWrite:false,side:THREE.DoubleSide,fog:true,
+  vertexShader:`uniform float uTime;uniform vec2 uWind;uniform float uGust;varying vec3 vWPos;
+  #include <fog_pars_vertex>
+  ${GLSL_WAVE}
+  void main(){vec3 p=position;p.y+=waveGrad(p.xz,uTime,uWind,uGust).x;vec4 w=modelMatrix*vec4(p,1.0);vWPos=w.xyz;vec4 mvPosition=viewMatrix*w;gl_Position=projectionMatrix*mvPosition;
+  #include <fog_vertex>
+  }`,
+  fragmentShader:`uniform float uTime;uniform vec2 uWind;uniform float uGust;uniform float uWL;uniform sampler2D uHeight;uniform vec4 uDrops[${MAXDROPS}];
+  uniform vec3 uSunDir;uniform vec3 uSunCol;uniform float uSunI;uniform float uDay;uniform float uCloud;uniform float uFlash;uniform vec3 uWaterCol;uniform float uRain;uniform float uTurb;
+  varying vec3 vWPos;
+  #include <fog_pars_fragment>
+  ${GLSL_NOISE}${GLSL_WAVE}${GLSL_SKY}
+  void main(){
+    float depth=uWL-terrH(uHeight,vWPos.xz);
+    if(depth<0.0)discard;
+    vec2 grad=waveGrad(vWPos.xz,uTime,uWind,uGust).yz;
+    for(int i=0;i<${MAXDROPS};i++){vec4 d=uDrops[i];float age=uTime-d.z;if(age<0.0||age>2.6)continue;
+      vec2 dv=vWPos.xz-d.xy;float r=length(dv)+1e-3;float x=r-age*11.0;
+      float env=exp(-x*x*0.5)*exp(-age*1.5)*d.w/(1.0+r*0.25);
+      grad+=env*cos(x*4.5)*1.1*dv/r;}
+    float ws=length(uWind);
+    vec2 q=vWPos.xz*0.5+uWind*uTime*1.4;float e=0.12;
+    float n0=vfbm(q),nx=vfbm(q+vec2(e,0.0)),nz=vfbm(q+vec2(0.0,e));
+    grad+=vec2(nx-n0,nz-n0)/e*(0.02+0.22*ws*(0.7+0.5*uGust));
+    if(uRain>0.01){vec2 rq=vWPos.xz*2.6;vec2 ci=floor(rq);float ph=vh12(ci);float tt=fract(uTime*1.6+ph);vec2 rc=fract(rq)-0.5-vec2(vh12(ci+3.1),vh12(ci+7.7))*0.4+0.2;
+      float rr_=length(rc);float ring=sin((rr_-tt*0.5)*40.0)*exp(-tt*4.0)*(1.0-smoothstep(0.0,0.5,rr_))*step(1.0-uRain*0.9,vh12(ci+floor(uTime*1.6+ph)));
+      grad+=rc/(rr_+1e-3)*ring*0.6;}
+    vec3 n=normalize(vec3(-grad.x,1.0,-grad.y));
+    vec3 V=normalize(cameraPosition-vWPos);
+    bool below=V.y<0.0;if(below)n=-n;
+    float cosT=max(dot(n,V),0.0);float F=0.02+0.98*pow(1.0-cosT,5.0);
+    vec3 R=reflect(-V,n);if(R.y<0.0)R.y=-R.y*0.3;
+    vec3 sk=skyBase(normalize(R));
+    vec3 Hh=normalize(uSunDir+V);float sp=pow(max(dot(n,Hh),0.0),500.0)*12.0+pow(max(dot(n,Hh),0.0),60.0)*0.25;
+    vec3 body=uWaterCol*(0.06+0.7*uSunI+0.3*uDay)*(1.0+uTurb);
+    vec3 col=mix(body,sk,F)+uSunCol*sp*uSunI;
+    float shore=smoothstep(0.0,2.5,depth);
+    float a=mix(0.18,0.94,F)*mix(0.35,1.0,shore)+uTurb*0.15;
+    float foam=(1.0-smoothstep(0.0,0.4,depth))*(0.55+0.45*vnoise(vWPos.xz*2.0+uTime*0.3));
+    col=mix(col,vec3(0.55,0.58,0.52)*(0.1+0.8*uDay),foam*0.25);a=max(a,foam*0.25);
+    if(below){col=mix(body*0.7,sk*0.6,0.35);a=0.55;}
+    gl_FragColor=vec4(col,clamp(a+sp*uSunI*0.3,0.0,1.0));
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+    #include <fog_fragment>
+  }`
+});
+const waterGeo=new THREE.PlaneGeometry(2*TX-0.2,2*TZ-0.2,180,105);waterGeo.rotateX(-Math.PI/2);
+const water=new THREE.Mesh(waterGeo,waterMat);water.position.y=WL0;water.renderOrder=2;scene.add(water);
+
+// 水体体积（透过侧玻璃看到的水色，按光程吸收）
+const volMat=new THREE.ShaderMaterial({uniforms:Object.assign({},G,THREE.UniformsLib.fog),transparent:true,depthWrite:false,side:THREE.BackSide,fog:false,
+  vertexShader:`varying vec3 vWPos;void main(){vec4 w=modelMatrix*vec4(position,1.0);vWPos=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}`,
+  fragmentShader:`uniform float uWL;uniform float uSunI;uniform float uDay;uniform float uTurb;uniform vec3 uWaterCol;varying vec3 vWPos;
+  void main(){vec3 ro=cameraPosition;vec3 rd=normalize(vWPos-ro);vec3 bmin=vec3(-60.0,0.0,-35.0),bmax=vec3(60.0,uWL,35.0);
+    vec3 inv=1.0/rd;vec3 t0=(bmin-ro)*inv,t1=(bmax-ro)*inv;vec3 tmn=min(t0,t1);float te=max(max(tmn.x,tmn.y),max(tmn.z,0.0));
+    float L=max(length(vWPos-ro)-te,0.0);vec3 sig=vec3(0.060,0.024,0.032)*(1.0+uTurb*2.5);vec3 T=exp(-sig*L);
+    vec3 scat=uWaterCol*(0.05+0.9*uSunI+0.25*uDay)*(1.0+uTurb*1.5);
+    float a=1.0-dot(T,vec3(0.33,0.34,0.33));
+    gl_FragColor=vec4(scat*(1.0-T)/max(a,1e-3),a);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }`});
+const vol=new THREE.Mesh(new THREE.BoxGeometry(2*TX-0.1,1,2*TZ-0.1).translate(0,0.5,0),volMat);vol.renderOrder=1;scene.add(vol);
+
+// JS 版水波（浮萍 / 睡莲随波）
+function waveH(x,z,t){const w=G.uWind.value,ws=Math.hypot(w.x,w.y),dx=ws>1e-3?w.x/ws:1,dz=ws>1e-3?w.y/ws:0,A=0.03+0.22*ws*(0.6+0.6*G.uGust.value);
+  return A*(0.5*Math.sin((dx*x+dz*z)*0.45-t*2.2)+0.3*Math.sin(((dx*.87-dz*.5)*x+(dx*.5+dz*.87)*z)*0.7-t*2.8+1.3)+0.2*Math.sin(((dx*.87+dz*.5)*x+(-dx*.5+dz*.87)*z)*1.1-t*3.5+2.1));}
+
+// 睡莲（叶 + 叶柄 + 花）
+const lily={pads:[],mesh:null,stems:null,flowers:null,fl:[]};
+{
+  const pg=(()=>{const A=acc(),NR=5,NA=36,c=new THREE.Color();
+    for(let i=0;i<=NR;i++)for(let j=0;j<=NA;j++){const r=i/NR,a=0.2+(Math.PI*2-0.4)*j/NA;
+      c.copy(C('#24481a')).lerp(C('#4a7a2a'),r*0.7+0.15*Math.sin(j*1.7));if(i===NR)c.copy(C('#5a3a1e'));
+      if(i>0&&j%6===3)c.multiplyScalar(0.85);vtx(A,new V3(Math.cos(a)*r,i===NR?0.05:0.012*Math.sin(r*3.14),Math.sin(a)*r),c,0);}
+    for(let i=0;i<NR;i++)for(let j=0;j<NA;j++){const a=i*(NA+1)+j,b=a+NA+1;A.idx.push(a,a+1,b,a+1,b+1,b);}
+    return geoFrom(A);})();
+  const cs=scatter(3,6000,(x,z,h,d)=>d>5&&d<14&&z>-20);
+  cs.forEach(c=>{for(let k=0;k<9;k++){const x=c.x+gauss()*4,z=c.z+gauss()*4,h=hAt(x,z);if(WL0-h<3||Math.abs(x)>TX-5||Math.abs(z)>TZ-5)continue;
+    lily.pads.push({ax:x,az:z,bed:h,x,z,s:rr(2.6,4.6),rot:rand()*6.28,ph:rand()*6.28});}});
+  lily.mesh=new THREE.InstancedMesh(pg,stdMat({wetGloss:0},{roughness:0.32,side:THREE.DoubleSide}),lily.pads.length);
+  lily.mesh.castShadow=true;lily.mesh.receiveShadow=true;lily.mesh.frustumCulled=false;scene.add(lily.mesh);
+  const sg=new THREE.CylinderGeometry(0.13,0.13,1,5).translate(0,0.5,0);{const n=sg.attributes.position.count,col=new Float32Array(n*3);const c=C('#5a4a24');for(let i=0;i<n;i++)col.set([c.r,c.g,c.b],i*3);sg.setAttribute('color',new THREE.BufferAttribute(col,3));}
+  lily.stems=new THREE.InstancedMesh(sg,stdMat({},{roughness:0.7}),lily.pads.length);lily.stems.frustumCulled=false;scene.add(lily.stems);
+  const A=acc(),w0=C('#f4ecf0'),w1=C('#e48aa8');
+  for(let ring=0;ring<2;ring++)for(let k=0;k<8;k++){const a=k/8*Math.PI*2+ring*0.39,el=ring?1.0:0.5,dh=new V3(Math.cos(a),0,Math.sin(a));
+    const dir=dh.clone().multiplyScalar(Math.cos(el)).add(new V3(0,Math.sin(el),0)).normalize();addLeaf(A,new V3(0,0.1,0),dir,new V3(-dh.z,0,dh.x),ring?1.5:1.8,0.75,w0,w1,0,1,4,-0.2,0.7);}
+  const cg=new THREE.CylinderGeometry(0.35,0.25,0.5,10).translate(0,0.4,0);const fg0=geoFrom(A);
+  {const n=cg.attributes.position.count,col=new Float32Array(n*3),c=C('#f0c030');for(let i=0;i<n;i++)col.set([c.r,c.g,c.b],i*3);cg.setAttribute('color',new THREE.BufferAttribute(col,3));cg.setAttribute('aH',new THREE.BufferAttribute(new Float32Array(n),1));}
+  cg.deleteAttribute('uv');const fg=mergeGeometries([fg0,cg.toNonIndexed().setIndex(null)].map(g=>g.index?g.toNonIndexed():g));
+  lily.fl=lily.pads.filter((_,i)=>i%4===1);
+  lily.flowers=new THREE.InstancedMesh(fg,stdMat({wetGloss:0},{roughness:0.5,side:THREE.DoubleSide,emissive:0x221018}),lily.fl.length);lily.flowers.frustumCulled=false;lily.flowers.castShadow=true;scene.add(lily.flowers);
+}
+// 浮萍
+const DW=3200,dw={x:new Float32Array(DW),z:new Float32Array(DW),r:new Float32Array(DW),s:new Float32Array(DW)};
+let duck;
+{
+  const g=new THREE.CircleGeometry(0.24,7);g.rotateX(-Math.PI/2);{const n=g.attributes.position.count,col=new Float32Array(n*3),c=C('#5f9a2c');for(let i=0;i<n;i++)col.set([c.r,c.g,c.b],i*3);g.setAttribute('color',new THREE.BufferAttribute(col,3));}
+  duck=new THREE.InstancedMesh(g,stdMat({wetGloss:0},{roughness:0.4}),DW);duck.frustumCulled=false;duck.castShadow=true;duck.receiveShadow=true;
+  const cs=scatter(6,6000,(x,z,h,d)=>d>0.8&&d<6);let k=0;
+  while(k<DW){const c=cs[k%cs.length];const x=c.x+gauss()*6,z=c.z+gauss()*6;if(Math.abs(x)>TX-1||Math.abs(z)>TZ-1||WL0-hAt(x,z)<0.3)continue;
+    dw.x[k]=x;dw.z[k]=z;dw.r[k]=rand()*6.28;dw.s[k]=rr(0.6,1.5);duck.setColorAt(k,tmpC.setRGB(rr(0.75,1.1),rr(0.85,1.1),rr(0.6,1)));k++;}
+  scene.add(duck);
+}
+
+// ============================================================ 玻璃缸体
+const glassMat=new THREE.ShaderMaterial({
+  uniforms:Object.assign({uHeight:{value:heightTex}},G),transparent:true,depthWrite:false,side:THREE.DoubleSide,
+  vertexShader:`varying vec3 vWPos;varying vec3 vN;void main(){vec4 w=modelMatrix*vec4(position,1.0);vWPos=w.xyz;vN=normalize(mat3(modelMatrix)*normal);gl_Position=projectionMatrix*viewMatrix*w;}`,
+  fragmentShader:`uniform float uHum;uniform float uWL;uniform float uDay;uniform float uSunI;uniform vec3 uSunDir;uniform vec3 uSunCol;uniform float uFlash;uniform float uTime;uniform sampler2D uHeight;
+  varying vec3 vWPos;varying vec3 vN;${GLSL_NOISE}
+  void main(){
+    vec3 V=normalize(cameraPosition-vWPos);vec3 N=vN;if(dot(N,V)<0.0)N=-N;
+    float fr=pow(1.0-max(dot(N,V),0.0),5.0);
+    vec2 gp=vec2(abs(vN.x)>0.5?vWPos.z:vWPos.x,vWPos.y);
+    float above=smoothstep(uWL+0.4,uWL+4.0,vWPos.y);
+    float dens=clamp(uHum,0.0,1.0)*above*(0.3+0.7*smoothstep(uWL,80.0,vWPos.y));
+    vec2 v1=vor(gp*1.5);float r1=(0.10+0.32*v1.y)*dens;float drop=(1.0-smoothstep(r1*0.55,r1+1e-4,v1.x))*step(0.2,v1.y)*step(0.01,r1);
+    vec2 v2=vor(gp*4.2+11.0);float r2=(0.14+0.26*v2.y)*dens;float drop2=(1.0-smoothstep(r2*0.5,r2+1e-4,v2.x))*step(0.01,r2);
+    float colI=floor(gp.x*1.1);float has=step(0.84,vh12(vec2(colI,3.0)));
+    float tx=abs(fract(gp.x*1.1)-0.5+(vnoise(vec2(colI,vWPos.y*0.15))-0.5)*0.4);
+    float trail=has*(1.0-smoothstep(0.05,0.16,tx))*step(vWPos.y,80.0-vh12(vec2(colI,9.0))*45.0)*dens;
+    float fog=dens*(1.0-trail)*(0.7+0.3*vnoise(gp*0.25));
+    float men=exp(-pow((vWPos.y-uWL-0.12)/0.2,2.0))*step(terrH(uHeight,clamp(vWPos.xz,vec2(-59.5,-34.5),vec2(59.5,34.5))),uWL-0.05);
+    vec3 light=vec3(0.62,0.68,0.72)*(0.006+0.65*uDay)+uSunCol*uSunI*0.2+uFlash*0.6;
+    vec3 c=mix(light*0.8,vec3(0.85,0.92,1.0)*(0.08+0.9*uDay),fr);
+    c+=(drop+drop2*0.6)*(light*0.35+uSunCol*uSunI*0.25);
+    float a=0.03+fr*0.5+fog*0.38+(drop+drop2*0.5)*0.12*(0.15+0.85*uDay)+trail*0.1;
+    c+=men*light*0.8;a+=men*0.45;
+    gl_FragColor=vec4(c,clamp(a,0.0,0.95));
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }`
+});
+{
+  const mk=(w,h,x,z,ry)=>{const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),glassMat);m.position.set(x,h/2,z);m.rotation.y=ry;m.renderOrder=5;scene.add(m);};
+  mk(2*TX,TH,0,TZ+0.05,0);mk(2*TX,TH,0,-TZ-0.05,Math.PI);mk(2*TZ,TH,TX+0.05,0,Math.PI/2);mk(2*TZ,TH,-TX-0.05,0,-Math.PI/2);
+  const fm=new THREE.MeshStandardMaterial({color:0x111214,roughness:0.4,metalness:0.6});
+  const bar=(sx,sy,sz,x,y,z)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),fm);m.position.set(x,y,z);m.castShadow=true;scene.add(m);};
+  for(const sx of[-1,1])for(const sz of[-1,1])bar(1.2,TH+1,1.2,sx*TX,TH/2,sz*TZ);
+  for(const y of[0.3,TH]){bar(2*TX+1.2,1.2,1.2,0,y,TZ);bar(2*TX+1.2,1.2,1.2,0,y,-TZ);bar(1.2,1.2,2*TZ,TX,y,0);bar(1.2,1.2,2*TZ,-TX,y,0);}
+  const base=new THREE.Mesh(new THREE.BoxGeometry(2*TX+1,0.6,2*TZ+1),fm);base.position.y=-0.3;scene.add(base);
+  const st=new THREE.Mesh(new THREE.BoxGeometry(2*TX+6,40,2*TZ+6),new THREE.MeshStandardMaterial({color:0x2a1d14,roughness:0.75}));st.position.y=-20.6;st.castShadow=st.receiveShadow=true;scene.add(st);
+  const gd=new THREE.Mesh(new THREE.CircleGeometry(900,64).rotateX(-Math.PI/2),new THREE.MeshStandardMaterial({color:0x2e3424,roughness:1}));gd.position.y=-40.6;gd.receiveShadow=true;scene.add(gd);
+}
+
+// 晨雾层
+const mistMat=new THREE.ShaderMaterial({uniforms:Object.assign({uLayer:{value:0},uHeight:{value:heightTex}},G),transparent:true,depthWrite:false,side:THREE.DoubleSide,
+  vertexShader:`varying vec3 vWPos;void main(){vec4 w=modelMatrix*vec4(position,1.0);vWPos=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}`,
+  fragmentShader:`uniform float uMist;uniform float uLayer;uniform sampler2D uHeight;uniform vec2 uWindOff;uniform float uDay;uniform float uSunI;uniform vec3 uSunCol;varying vec3 vWPos;${GLSL_NOISE}
+  void main(){float gap=vWPos.y-terrH(uHeight,vWPos.xz);
+    float n=vfbm(vWPos.xz*0.04+uWindOff*0.02*(1.0+uLayer*0.15)+uLayer*3.7);
+    float a=smoothstep(0.38,0.8,n)*uMist*smoothstep(0.0,3.0,gap)*smoothstep(0.0,8.0,60.0-abs(vWPos.x))*smoothstep(0.0,6.0,35.0-abs(vWPos.z))*(1.0-uLayer*0.11);
+    vec3 c=vec3(0.75,0.8,0.84)*(0.05+0.75*uDay)+uSunCol*uSunI*0.35;
+    gl_FragColor=vec4(c,a*0.3);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }`});
+const mists=[];for(let k=0;k<7;k++){const m=new THREE.Mesh(new THREE.PlaneGeometry(2*TX,2*TZ).rotateX(-Math.PI/2),mistMat.clone());m.material.uniforms=Object.assign({},G,{uLayer:{value:k},uHeight:{value:heightTex}});m.renderOrder=3;mists.push(m);scene.add(m);}
+
+// ============================================================ 粒子：雨 / 水花 / 气泡
+const RN=7000,rainArr=new Float32Array(RN*6),rd=new Float32Array(RN*3);
+for(let i=0;i<RN;i++){rd[i*3]=rr(-170,170);rd[i*3+1]=rr(-40,280);rd[i*3+2]=rr(-140,140);}
+const rainGeo=new THREE.BufferGeometry();rainGeo.setAttribute('position',new THREE.BufferAttribute(rainArr,3).setUsage(THREE.DynamicDrawUsage));
+const rain=new THREE.LineSegments(rainGeo,new THREE.LineBasicMaterial({color:0xb8c8d8,transparent:true,opacity:0.32,depthWrite:false}));rain.frustumCulled=false;rain.renderOrder=4;scene.add(rain);
+const SPN=900,spArr=new Float32Array(SPN*3).fill(-999),spV=new Float32Array(SPN*3),spL=new Float32Array(SPN);let spI=0;
+const spGeo=new THREE.BufferGeometry();spGeo.setAttribute('position',new THREE.BufferAttribute(spArr,3).setUsage(THREE.DynamicDrawUsage));
+const splash=new THREE.Points(spGeo,new THREE.PointsMaterial({color:0xd8e8f4,size:0.45,transparent:true,opacity:0.75,depthWrite:false}));splash.frustumCulled=false;splash.renderOrder=4;scene.add(splash);
+const BN=360,bub={x:new Float32Array(BN),y:new Float32Array(BN).fill(-999),z:new Float32Array(BN),v:new Float32Array(BN),s:new Float32Array(BN),p:new Float32Array(BN)};let bI=0;
+const bubMesh=new THREE.InstancedMesh(new THREE.SphereGeometry(1,10,8),new THREE.MeshStandardMaterial({color:0xeefcff,roughness:0.05,metalness:0.2,transparent:true,opacity:0.6,emissive:0x1c2a2a}),BN);
+patch(bubMesh.material,localU({wetGloss:0}),false);bubMesh.frustumCulled=false;scene.add(bubMesh);
+let dropI=0;
+function addRipple(x,z,s){dropsU[dropI].set(x,z,G.uTime.value,s);dropI=(dropI+1)%MAXDROPS;}
+function addSplash(x,y,z,n,k){for(let i=0;i<n;i++){const j=spI;spI=(spI+1)%SPN;spArr[j*3]=x;spArr[j*3+1]=y+0.1;spArr[j*3+2]=z;const a=rand()*6.28,s=rr(10,30)*k;spV[j*3]=Math.cos(a)*s;spV[j*3+1]=rr(20,45)*k;spV[j*3+2]=Math.sin(a)*s;spL[j]=rr(0.2,0.4);}}
+function addBubble(x,y,z,s){const j=bI;bI=(bI+1)%BN;bub.x[j]=x;bub.y[j]=y;bub.z[j]=z;bub.v[j]=rr(5,9);bub.s[j]=s;bub.p[j]=rand()*6.28;}
+
+// ============================================================ 天气 / 时间 / 生态状态
+const WNAMES=['晴','多云','阵雨','暴雨'];
+const WT=[{cloud:0.1,rain:0,wind:0.15},{cloud:0.55,rain:0,wind:0.3},{cloud:0.84,rain:0.45,wind:0.4},{cloud:0.98,rain:1,wind:0.8}];
+const S={hour:8.2,speed:4,paused:false,auto:true,state:0,nextChange:11.3,dayCount:0,
+  cloud:0.1,rain:0,wind:0.15,dir:200*Math.PI/180,tCloud:0.1,tRain:0,tWind:0.15,tDir:200*Math.PI/180};
+const E={airT:19,waterT:20.5,hum:88,wet:0.55,level:WL0,DO:7.2,CO2:7,bio:1,turb:0,lux:0,sat:9};
+const hist={DO:[],T:[],L:[]};let histAcc=0;
+function satDO(T){return 14.62-0.3898*T+0.006969*T*T-0.00005897*T*T*T;}
+function scheduleWeather(){
+  const T=[[0.7,0.3,0,0],[0.4,0.25,0.25,0.1],[0.1,0.55,0.15,0.2],[0,0.35,0.65,0]][S.state];
+  let r=rand(),k=0;while(k<3&&r>T[k]){r-=T[k];k++;}
+  if(S.state===0&&S.dayCount===0&&S.hour<12)k=1;
+  if(S.state===1&&S.dayCount===0&&S.hour<14)k=2;
+  S.state=k;S.nextChange=S.hour+rr(1.5,4.5);
+}
+function applyTargets(){const w=WT[S.state];S.tCloud=w.cloud;S.tRain=w.rain;S.tWind=w.wind;}
+applyTargets();
+
+function ecoStep(dm,I,elev){
+  const T=E.waterT;
+  const tAir=16.5+11*I+2.5*Math.max(0,elev)-3*S.rain-2*S.wind;
+  E.airT+=(tAir-E.airT)*(1-Math.exp(-dm*0.02));
+  E.waterT+=(E.airT-E.waterT)*(1-Math.exp(-dm*0.004))+I*0.0012*dm;
+  const evap=Math.max(0,(0.0003+0.0016*I+0.0011*S.wind)*(1-E.hum/108)*(1+(E.waterT-20)*0.04));
+  E.level=clamp(E.level+S.rain*0.022*dm-evap*dm,21.5,26.5);
+  const hT=clamp(64+34*S.rain+700*evap-14*S.wind-10*I+(E.wet*8),35,99.5);
+  E.hum+=(hT-E.hum)*(1-Math.exp(-dm*0.03));
+  E.wet=clamp(E.wet+S.rain*0.09*dm-(0.0012+0.010*I+0.005*S.wind)*(1.12-E.hum/100)*dm,0,1);
+  E.sat=satDO(T);
+  const PAR=Math.min(1,I*1.3),tf=Math.pow(1.066,T-20);
+  const P=0.024*E.bio*PAR/(PAR+0.25)*1.25*Math.min(1,E.CO2/3)*Math.min(tf,1.4)*(1-E.turb*0.5);
+  const R=(0.0045*E.bio+0.0013)*tf;
+  const k=0.003+0.02*S.wind+0.02*S.rain;
+  E.DO=clamp(E.DO+(P-R+k*(E.sat-E.DO))*dm,0,20);
+  E.CO2=clamp(E.CO2+((R-P)*1.3+k*0.9*(1.2-E.CO2))*dm,0.3,40);
+  E.bio=clamp(E.bio+(P*0.9-R*0.75)*0.012*dm,0.6,1.6);
+  E.turb=clamp(E.turb+S.rain*S.rain*0.006*dm-E.turb*0.008*dm,0,1);
+  return P;
+}
+
+// ============================================================ UI
+const $=id=>document.getElementById(id);
+const speedFromV=v=>(1/60)*Math.pow(7200,v/100),vFromSpeed=m=>Math.log(m*60)/Math.log(7200)*100;
+$('sSpeed').value=vFromSpeed(S.speed);
+const fmtH=h=>{const m=Math.floor((h%24)*60);return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');};
+const dirName=a=>{const fx=-Math.cos(a),fz=-Math.sin(a);const ang=Math.atan2(-fz,fx)*180/Math.PI;const N=['东','东北','北','西北','西','西南','南','东南'];return N[((Math.round(ang/45)%8)+8)%8]+'风';};
+function setWeatherBtn(){document.querySelectorAll('#wBtns button').forEach(b=>b.classList.toggle('on',S.auto?b.dataset.w==='auto':(b.dataset.w===String(S.manualState))));}
+$('sHour').addEventListener('input',e=>{S.hour=+e.target.value;});
+$('sSpeed').addEventListener('input',e=>{S.speed=speedFromV(+e.target.value);});
+$('bPause').addEventListener('click',()=>{S.paused=!S.paused;$('bPause').textContent=S.paused?'继续':'暂停';$('bPause').classList.toggle('on',S.paused);});
+addEventListener('keydown',e=>{if(e.code==='Space'&&e.target.tagName!=='INPUT'){e.preventDefault();$('bPause').click();}});
+document.querySelectorAll('#wBtns button').forEach(b=>b.addEventListener('click',()=>{
+  if(b.dataset.w==='auto'){S.auto=true;S.nextChange=S.hour+0.5;}else{S.auto=false;S.manualState=+b.dataset.w;S.state=S.manualState;applyTargets();}setWeatherBtn();}));
+for(const [id,key] of [['sCloud','tCloud'],['sRain','tRain'],['sWind','tWind']])$(id).addEventListener('input',e=>{S.auto=false;S.manualState=-1;S[key]=+e.target.value;
+  if(key==='tRain'&&S.tRain>0.05)S.tCloud=Math.max(S.tCloud,0.7+S.tRain*0.28);setWeatherBtn();});
+$('sDir').addEventListener('input',e=>{S.tDir=+e.target.value*Math.PI/180;});
+document.querySelectorAll('.fold').forEach(b=>b.addEventListener('click',()=>{const p=b.closest('.panel');p.classList.toggle('min');b.textContent=p.classList.contains('min')?'+':'–';}));
+if(innerWidth<760)for(const id of['eco','ctl']){$(id).classList.add('min');$(id).querySelector('.fold').textContent='+';}
+
+const CAMS=[[[80,62,150],[0,22,0]],[[22,15,118],[18,13,0]],[[-30,52,62],[-12,25,-6]],[[-2,58,72],[-14,24,0]],[[0,215,22],[0,18,0]]];
+let camAnim=null;
+function fitPos(p,t){const P=new V3(...p),T=new V3(...t),a=camera.aspect;if(a<1.2)P.sub(T).multiplyScalar(Math.pow(1.2/a,0.85)).add(T);return P;}
+camera.position.copy(fitPos(CAMS[0][0],CAMS[0][1]));
+document.querySelectorAll('#camBtns button').forEach(b=>b.addEventListener('click',()=>{const [p,t]=CAMS[+b.dataset.c];
+  camAnim={t:0,p0:camera.position.clone(),t0:controls.target.clone(),p1:fitPos(p,t),t1:new V3(...t)};}));
+
+const spark=$('spark'),sg=spark.getContext('2d');
+function drawSpark(){const W=spark.width,H=spark.height;sg.clearRect(0,0,W,H);
+  sg.strokeStyle='rgba(255,255,255,0.07)';sg.lineWidth=1;for(let k=1;k<4;k++){sg.beginPath();sg.moveTo(0,H*k/4);sg.lineTo(W,H*k/4);sg.stroke();}
+  const line=(arr,lo,hi,col)=>{if(arr.length<2)return;sg.strokeStyle=col;sg.lineWidth=2.5;sg.lineJoin='round';sg.beginPath();
+    arr.forEach((v,i)=>{const x=W-(arr.length-1-i)*(W/143),y=H-6-(clamp((v-lo)/(hi-lo),0,1))*(H-12);i?sg.lineTo(x,y):sg.moveTo(x,y);});sg.stroke();};
+  line(hist.L,21.5,26.5,'#7cc4ff');line(hist.T,14,32,'#ffb36b');line(hist.DO,0,16,'#7fd6a8');}
+
+// ============================================================ 主循环
+const clock=new THREE.Clock();let uiAcc=1,flash=0,flashT=0,rippleBudget=0,splashBudget=0,bubbleBudget=0,ventBudget=0,rainActive=0,lastP=0,simT=0;
+const windOff=new V2();
+function frame(){
+  const dt=Math.min(clock.getDelta(),0.05);simT+=dt;G.uTime.value=simT;
+  // ---- 时间推进
+  const dm=S.paused?0:S.speed*dt;
+  if(dm>0){S.hour+=dm/60;if(S.hour>=24){S.hour-=24;S.dayCount++;S.nextChange-=24;}}
+  // ---- 天气
+  if(S.auto&&dm>0&&S.hour>=S.nextChange){scheduleWeather();applyTargets();}
+  const wr=1-Math.exp(-(dm*0.05+dt*0.6));
+  S.cloud+=(S.tCloud-S.cloud)*wr;S.rain+=((S.cloud>0.68?S.tRain:0)-S.rain)*wr;S.wind+=(S.tWind-S.wind)*wr;
+  if(S.auto&&dm>0)S.tDir+=snoise(S.hour*0.2,5.5)*dm*0.004;
+  let dd=S.tDir-S.dir;dd=Math.atan2(Math.sin(dd),Math.cos(dd));S.dir+=dd*(1-Math.exp(-dt*1.5));
+  const gust=clamp(0.5+0.55*snoise(simT*0.22,3.3)+0.3*snoise(simT*0.9,7.1),0,1.5)*(0.5+S.wind);
+  G.uGust.value=gust;G.uWind.value.set(Math.cos(S.dir),Math.sin(S.dir)).multiplyScalar(S.wind);
+  windOff.addScaledVector(G.uWind.value,dt*(30+gust*20));G.uWindOff.value.copy(windOff);
+  G.uCurrent.value.set(0.35,0.12).addScaledVector(G.uWind.value,0.4);
+  // ---- 太阳
+  const a=(S.hour-6)/12*Math.PI;const sd=new V3(Math.cos(a),Math.sin(a)*0.85,0.35+0.25*Math.max(0,Math.sin(a))).normalize();
+  const elev=sd.y,day=ss(-0.12,0.18,elev),direct=ss(-0.02,0.2,elev)*(1-0.86*S.cloud);
+  const sunC=new THREE.Color(1,0.42,0.18).lerp(new THREE.Color(1,0.96,0.9),ss(0.0,0.45,elev));
+  G.uSunDir.value.copy(sd);G.uDay.value=day;G.uCloud.value=S.cloud;
+  const moonDir=new V3(-sd.x,-sd.y,sd.z),moonI=ss(0.0,0.15,-elev)*(1-0.8*S.cloud)*0.35;
+  if(direct*3.2>=moonI){sun.position.copy(sd).multiplyScalar(250).add(sun.target.position);sun.color.copy(sunC);sun.intensity=3.3*direct;G.uSunCol.value.copy(sunC);G.uSunI.value=direct;}
+  else{sun.position.copy(moonDir).multiplyScalar(250).add(sun.target.position);sun.color.setRGB(0.6,0.7,1);sun.intensity=moonI;G.uSunCol.value.setRGB(0.5,0.6,0.9);G.uSunI.value=moonI*0.25;}
+  // 闪电
+  if(S.rain>0.75&&rand()<dt*0.12*S.rain){flash=1;flashT=0;}
+  if(flash>0){flashT+=dt;flash=Math.max(0,1-flashT/0.45)*(0.6+0.4*Math.sin(flashT*60));}
+  G.uFlash.value=flash*0.8;
+  hemi.intensity=(0.13+1.0*day*(1-0.35*S.cloud))+flash*2.5;
+  hemi.color.setRGB(lerp(0.25,0.72,day),lerp(0.3,0.82,day),lerp(0.5,1.0,day));
+  renderer.toneMappingExposure=lerp(1.9,0.95,day)*(1+S.cloud*0.25*day);
+  const fogC=new THREE.Color(0.012,0.016,0.03).lerp(new THREE.Color(0.42,0.52,0.64),day).lerp(new THREE.Color(0.32,0.35,0.38).multiplyScalar(0.2+day*0.8),S.cloud*0.8);
+  scene.fog.color.copy(fogC);scene.fog.density=0.0011+S.rain*0.0035;
+  // ---- 生态
+  let P=lastP;
+  if(dm>0){const n=Math.ceil(dm/2);for(let k=0;k<n;k++)P=ecoStep(dm/n,direct,elev);lastP=P;}
+  E.lux=direct*98000+day*(1-0.6*S.cloud)*14000+moonI*0.5;
+  G.uWL.value+=(E.level-G.uWL.value)*(1-Math.exp(-dt*3));water.position.y=G.uWL.value;vol.scale.y=G.uWL.value;
+  G.uWet.value=E.wet*0.85;G.uTurb.value=E.turb;G.uRain.value=S.rain;
+  growthU.value=0.86+0.14*E.bio;
+  const hum01=clamp((E.hum-72)/26,0,1);G.uHum.value=hum01;
+  const mist=clamp(ss(82,98,E.hum)*(1-direct*0.85)*(0.6+0.4*ss(18,12,E.airT))+S.rain*0.25,0,1);G.uMist.value+=(mist-G.uMist.value)*(1-Math.exp(-dt*0.8));
+  mists.forEach((m,k)=>{m.position.y=G.uWL.value+0.4+k*1.3;m.visible=G.uMist.value>0.01;});
+  // ---- 雨
+  const target=Math.floor(RN*Math.pow(S.rain,0.8));rainActive=target;
+  const vx=G.uWind.value.x*320,vz=G.uWind.value.y*320,vy=-760;
+  rippleBudget=Math.min(rippleBudget+dt*22*Math.min(1,S.rain*3),4);splashBudget=Math.min(splashBudget+dt*500*S.rain,60);
+  const lvl=G.uWL.value;
+  for(let i=0;i<rainActive;i++){let x=rd[i*3],y=rd[i*3+1],z=rd[i*3+2];const sp=0.85+(i%7)*0.05;
+    x+=vx*dt*sp;y+=vy*dt*sp;z+=vz*dt*sp;
+    const inT=Math.abs(x)<TX&&Math.abs(z)<TZ;let g;
+    if(inT){const th=hAt(x,z);g=Math.max(th,lvl);}else g=(Math.abs(x)<TX+3&&Math.abs(z)<TZ+3)?0:-40;
+    if(y<=g){
+      if(inT){const onWater=lvl>hAt(x,z);if(onWater&&rippleBudget>=1){rippleBudget-=1;addRipple(x,z,rr(0.5,1));}
+        if(splashBudget>=1){splashBudget-=1;addSplash(x,g,z,onWater?3:2,onWater?1:0.6);}}
+      y=rr(200,290);x=rr(-170,170)-vx*(y+40)/760;z=rr(-140,140)-vz*(y+40)/760;}
+    rd[i*3]=x;rd[i*3+1]=y;rd[i*3+2]=z;
+    const j=i*6,l=0.017*sp;rainArr[j]=x;rainArr[j+1]=y;rainArr[j+2]=z;rainArr[j+3]=x-vx*l;rainArr[j+4]=y-vy*l;rainArr[j+5]=z-vz*l;}
+  rainGeo.setDrawRange(0,rainActive*2);rainGeo.attributes.position.needsUpdate=true;rain.visible=rainActive>0;
+  // 水花
+  for(let j=0;j<SPN;j++){if(spL[j]<=0)continue;spL[j]-=dt;spV[j*3+1]-=980*dt*0.5;spArr[j*3]+=spV[j*3]*dt*0.5;spArr[j*3+1]+=spV[j*3+1]*dt*0.5;spArr[j*3+2]+=spV[j*3+2]*dt*0.5;if(spL[j]<=0)spArr[j*3+1]=-999;}
+  spGeo.attributes.position.needsUpdate=true;
+  // ---- 光合作用吐泡 + 湿地底泥气泡
+  const satR=E.DO/E.sat;const pearl=clamp((satR-1.0)*6,0,1)*clamp(direct*1.4,0,1);
+  bubbleBudget+=dt*pearl*28*(dm>0?1:0.3);
+  while(bubbleBudget>=1&&pearlPts.length){bubbleBudget-=1;const p=pearlPts[Math.floor(rand()*pearlPts.length)];if(p.y<lvl-0.5)addBubble(p.x+rr(-0.6,0.6),p.y+rr(-1.5,0.5),p.z+rr(-0.6,0.6),rr(0.08,0.17));}
+  ventBudget+=dt*(0.25+E.waterT*0.02);
+  while(ventBudget>=1){ventBudget-=1;const x=rr(-30,25),z=rr(-30,30),h=hAt(x,z);if(lvl-h>0.8&&lvl-h<8)for(let k=0;k<Math.ceil(rr(1,4));k++)addBubble(x+rr(-0.3,0.3),h-k*0.6,z+rr(-0.3,0.3),rr(0.15,0.35));}
+  const bm=bubMesh.instanceMatrix.array;
+  for(let j=0;j<BN;j++){let s=bub.s[j];if(bub.y[j]>-900){bub.y[j]+=bub.v[j]*dt*(1+s*3);bub.x[j]+=Math.sin(simT*6+bub.p[j])*dt*0.6+G.uCurrent.value.x*dt*0.5;bub.z[j]+=Math.cos(simT*5+bub.p[j])*dt*0.6;
+      if(bub.y[j]>=lvl-s*0.5){if(s>0.14&&rippleBudget>=0.3){addRipple(bub.x[j],bub.z[j],0.25);}bub.y[j]=-999;}}else s=0;
+    const o=j*16;bm[o]=s;bm[o+1]=0;bm[o+2]=0;bm[o+3]=0;bm[o+4]=0;bm[o+5]=s;bm[o+6]=0;bm[o+7]=0;bm[o+8]=0;bm[o+9]=0;bm[o+10]=s;bm[o+11]=0;bm[o+12]=bub.x[j];bm[o+13]=bub.y[j];bm[o+14]=bub.z[j];bm[o+15]=1;}
+  bubMesh.instanceMatrix.needsUpdate=true;
+  // ---- 浮萍漂移（顺风聚集）
+  const da=duck.instanceMatrix.array,wx=G.uWind.value.x,wz=G.uWind.value.y,cu=G.uCurrent.value;
+  for(let k=0;k<DW;k++){let x=dw.x[k],z=dw.z[k];
+    const nx=x+(wx*2.4*(0.6+gust*0.5)+cu.x*0.25+Math.sin(simT*0.3+k)*0.05)*dt,nz=z+(wz*2.4*(0.6+gust*0.5)+cu.y*0.25+Math.cos(simT*0.27+k*1.3)*0.05)*dt;
+    if(Math.abs(nx)<TX-0.6&&Math.abs(nz)<TZ-0.6&&lvl-hAt(nx,nz)>0.12){x=nx;z=nz;}
+    else if(lvl-hAt(x,z)<0.05){x+=rr(-0.3,0.3);z+=rr(-0.3,0.3);x=clamp(x,-TX+0.7,TX-0.7);z=clamp(z,-TZ+0.7,TZ-0.7);}
+    dw.x[k]=x;dw.z[k]=z;const s=dw.s[k],r=dw.r[k],cs=Math.cos(r)*s,sn=Math.sin(r)*s,o=k*16,stranded=lvl-hAt(x,z)<0.05;
+    const y=stranded?hAt(x,z)+0.06:lvl+waveH(x,z,simT)+0.05;
+    da[o]=cs;da[o+1]=0;da[o+2]=-sn;da[o+3]=0;da[o+4]=0;da[o+5]=s;da[o+6]=0;da[o+7]=0;da[o+8]=sn;da[o+9]=0;da[o+10]=cs;da[o+11]=0;da[o+12]=x;da[o+13]=y;da[o+14]=z;da[o+15]=1;}
+  duck.instanceMatrix.needsUpdate=true;
+  // ---- 睡莲
+  const up=new V3(0,1,0);
+  lily.pads.forEach((p,i)=>{const ox=Math.sin(simT*0.4+p.ph)*0.4+wx*2.2,oz=Math.cos(simT*0.33+p.ph)*0.4+wz*2.2;p.x=p.ax+ox;p.z=p.az+oz;
+    const y=lvl+waveH(p.x,p.z,simT)+0.04;
+    dummy.position.set(p.x,y,p.z);const tilt=(waveH(p.x+1,p.z,simT)-waveH(p.x-1,p.z,simT))*0.5;dummy.rotation.set(0,p.rot+Math.sin(simT*0.2+p.ph)*0.05,tilt);dummy.scale.setScalar(p.s);dummy.updateMatrix();lily.mesh.setMatrixAt(i,dummy.matrix);
+    const dir=new V3(p.x-p.ax,y-p.bed,p.z-p.az);const len=dir.length();dummy.position.set(p.ax,p.bed,p.az);dummy.quaternion.setFromUnitVectors(up,dir.normalize());dummy.scale.set(1,len,1);dummy.updateMatrix();lily.stems.setMatrixAt(i,dummy.matrix);
+    dummy.rotation.set(0,0,0);p.y=y;});
+  lily.fl.forEach((p,i)=>{dummy.position.set(p.x+p.s*0.15,p.y+0.15,p.z);dummy.rotation.set(0,p.rot,0);const open=0.75+0.35*ss(0.05,0.4,direct);dummy.scale.set(open,0.9+0.3*open,open);dummy.updateMatrix();lily.flowers.setMatrixAt(i,dummy.matrix);});
+  lily.mesh.instanceMatrix.needsUpdate=lily.stems.instanceMatrix.needsUpdate=lily.flowers.instanceMatrix.needsUpdate=true;
+  // ---- 历史记录
+  if(dm>0){histAcc+=dm;while(histAcc>=10){histAcc-=10;hist.DO.push(E.DO);hist.T.push(E.waterT);hist.L.push(E.level);for(const k in hist)if(hist[k].length>144)hist[k].shift();}}
+  // ---- UI
+  uiAcc+=dt;if(uiAcc>0.25){uiAcc=0;updateUI(pearl,P);}
+  // ---- 相机
+  if(camAnim){camAnim.t=Math.min(1,camAnim.t+dt/1.4);const e=camAnim.t<0.5?4*camAnim.t**3:1-Math.pow(-2*camAnim.t+2,3)/2;
+    camera.position.lerpVectors(camAnim.p0,camAnim.p1,e);controls.target.lerpVectors(camAnim.t0,camAnim.t1,e);if(camAnim.t>=1)camAnim=null;}
+  sky.position.copy(camera.position);
+  controls.update();renderer.render(scene,camera);
+  requestAnimationFrame(frame);
+}
+function updateUI(pearl,P){
+  $('clockT').textContent=fmtH(S.hour);
+  const wn=S.rain>0.7?'暴雨':S.rain>0.08?'阵雨':S.cloud>0.4?'多云':'晴';
+  $('clockW').textContent=`第 ${S.dayCount+1} 天 · ${wn} · ${dirName(S.dir)} ${(S.wind*12).toFixed(1)} m/s`;
+  if(document.activeElement!==$('sHour'))$('sHour').value=S.hour;
+  $('oHour').textContent=fmtH(S.hour);
+  $('oSpeed').textContent=S.speed<1?`1秒=${(S.speed*60).toFixed(0)}秒`:`1秒=${S.speed<10?S.speed.toFixed(1):S.speed.toFixed(0)}分`;
+  for(const [id,o,v,f] of [['sCloud','oCloud',S.cloud,v=>Math.round(v*100)+'%'],['sRain','oRain',S.rain,v=>(v*28).toFixed(1)+' mm/h'],['sWind','oWind',S.wind,v=>(v*12).toFixed(1)+' m/s']]){
+    if(document.activeElement!==$(id))$(id).value=v;$(o).textContent=f(v);}
+  if(document.activeElement!==$('sDir'))$('sDir').value=((S.tDir*180/Math.PI)%360+360)%360;$('oDir').textContent=dirName(S.dir);
+  $('mLux').innerHTML=E.lux>=1000?`${(E.lux/1000).toFixed(1)}<small>klx</small>`:`${E.lux.toFixed(E.lux<10?1:0)}<small>lx</small>`;
+  $('mTemp').innerHTML=`${E.airT.toFixed(1)}<small>/</small>${E.waterT.toFixed(1)}<small>°C</small>`;
+  $('mHum').innerHTML=`${E.hum.toFixed(0)}<small>%</small>`;$('bHum').style.width=E.hum+'%';
+  const sat=E.DO/E.sat*100;$('mDO').innerHTML=`${E.DO.toFixed(1)}<small>mg/L</small>`;$('kDO').textContent=`溶解氧 · 饱和 ${sat.toFixed(0)}%`;$('bDO').style.width=Math.min(100,sat/1.5)+'%';
+  $('bDO').style.background=sat<50?'#ff7b6b':sat<80?'#ffb36b':'#7fd6a8';
+  const pH=7-Math.log10(E.CO2/12);$('mCO2').innerHTML=`${E.CO2.toFixed(1)}<small>mg/L</small>`;$('kCO2').textContent=`CO₂ · pH ${pH.toFixed(2)}`;
+  $('mLvl').innerHTML=`${E.level.toFixed(2)}<small>cm</small>`;
+  $('mWet').innerHTML=`${(E.wet*100).toFixed(0)}<small>%</small>`;$('bWet').style.width=E.wet*100+'%';
+  $('mBio').innerHTML=`${(E.bio*100).toFixed(0)}<small>%</small>`;
+  const msgs=[];
+  if(S.rain>0.08)msgs.push(`降雨中：水位上涨，湿地低洼处积水${E.turb>0.15?'，雨水搅起底泥使水体浑浊':''}。`);
+  if(pearl>0.1)msgs.push('溶氧过饱和，水草叶尖正在“吐泡”（光合作用）。');
+  else if(P>0.004&&E.lux>3000)msgs.push('水草光合作用中，溶解氧逐渐升高。');
+  if(E.lux<200)msgs.push('夜间：植物和底泥微生物呼吸耗氧，CO₂ 积累、pH 下降。');
+  if(G.uMist.value>0.25)msgs.push('空气湿度接近饱和，水面起雾，玻璃上凝结水珠。');
+  if(S.rain<0.05&&E.lux>20000&&E.wet<0.4)msgs.push('晴好：表面变干，蒸发使水位缓慢下降。');
+  if(S.wind>0.5)msgs.push('强风：挺水植物大幅摇摆，浮萍被吹向下风岸堆积。');
+  $('status').textContent=msgs.slice(0,2).join(' ')||'生态缸处于平稳状态。';
+  drawSpark();
+}
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+setWeatherBtn();
+// 预热：模拟一夜，让历史曲线有数据
+{S.hour=8.2-24*0;const saveH=S.hour;let h=saveH-24;for(let t=0;t<144;t++){const hh=((h+t/6)%24+24)%24;const a=(hh-6)/12*Math.PI;const el=Math.sin(a)*0.85;const I=ss(-0.02,0.2,el)*(1-0.86*0.15);
+  for(let k=0;k<5;k++)ecoStep(2,I,el);hist.DO.push(E.DO);hist.T.push(E.waterT);hist.L.push(E.level);}}
+S.hour=8.2;E.level=WL0;hist.L.fill(WL0);
+$('loading').style.opacity=0;setTimeout(()=>$('loading').remove(),700);
+frame();
+window.__viv={S,E,G,camera,controls,renderer,scene,snap:()=>{renderer.render(scene,camera);return canvas.toDataURL("image/png");}};
+</script>
+</body>
+</html>
