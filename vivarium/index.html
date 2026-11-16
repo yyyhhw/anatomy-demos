@@ -795,7 +795,7 @@ const pearlPts=[];
 { // 香蒲
   const L=clusters(12,8,3,(x,z,h,d)=>d>-1.2&&d<2.2&&Math.abs(z)<TZ-8,(x,z,h,d)=>d>-1.8&&d<3);
   const stalk=new THREE.CylinderGeometry(0.1,0.17,1,6,10).translate(0,0.5,0);
-  const head=new THREE.CylinderGeometry(0.55,0.55,0.13,14,4).translate(0,0.85,0);
+  const head=new THREE.CylinderGeometry(0.75,0.75,0.13,14,4).translate(0,0.85,0);
   for(const g of [stalk,head]){const p=g.attributes.position,col=new Float32Array(p.count*3),ah=new Float32Array(p.count),uvA=new Float32Array(p.count*2);
     for(let i=0;i<p.count;i++){const y=p.getY(i);ah[i]=y;const c=g===head?C('#4a2c18').multiplyScalar(0.8+0.4*rand()):C('#5a6a2a').lerp(C('#8a8a46'),y);col.set([c.r,c.g,c.b],i*3);uvA[i*2]=g.attributes.uv.getX(i)*2-1;uvA[i*2+1]=y;}
     g.setAttribute('color',new THREE.BufferAttribute(col,3));g.setAttribute('aH',new THREE.BufferAttribute(ah,1));g.setAttribute('auv',new THREE.BufferAttribute(uvA,2));}
@@ -917,7 +917,7 @@ const lily={pads:[],mesh:null,stems:null,flowers:null,fl:[]};
     return geoFrom(A);})();
   const cs=scatter(6,8000,(x,z,h,d)=>d>6&&d<30&&z>-TZ*0.55);
   cs.forEach(c=>{for(let k=0;k<30&&lily.pads.length<60;k++){const x=c.x+gauss()*7,z=c.z+gauss()*4,h=hAt(x,z);if(WL0-h<3||Math.abs(x)>TX-5||Math.abs(z)>TZ-5)continue;
-    const s=rr(3,6);if(lily.pads.some(q=>Math.hypot(q.ax-x,q.az-z)<(q.s+s)*0.8))continue;
+    const s=rr(4.5,8);if(lily.pads.some(q=>Math.hypot(q.ax-x,q.az-z)<(q.s+s)*0.8))continue;
     lily.pads.push({ax:x,az:z,bed:h,x,z,s,rot:rand()*6.28,ph:rand()*6.28});}});
   lily.mesh=new THREE.InstancedMesh(pg,stdMat({wetGloss:0,auv:true,mode:8,bump:1},{roughness:0.28,side:THREE.DoubleSide}),lily.pads.length);
   lily.mesh.castShadow=true;lily.mesh.receiveShadow=true;lily.mesh.frustumCulled=false;scene.add(lily.mesh);
@@ -937,7 +937,7 @@ const lily={pads:[],mesh:null,stems:null,flowers:null,fl:[]};
 const DW=6500,dw={x:new Float32Array(DW),z:new Float32Array(DW),r:new Float32Array(DW),s:new Float32Array(DW)};
 let duck;
 {
-  const g=new THREE.CircleGeometry(0.24,8);g.rotateX(-Math.PI/2);{const n=g.attributes.position.count,col=new Float32Array(n*3),c=C('#5f9a2c');for(let i=0;i<n;i++)col.set([c.r,c.g,c.b],i*3);g.setAttribute('color',new THREE.BufferAttribute(col,3));}
+  const g=new THREE.CircleGeometry(0.19,8);g.rotateX(-Math.PI/2);{const n=g.attributes.position.count,col=new Float32Array(n*3),c=C('#5f9a2c');for(let i=0;i<n;i++)col.set([c.r,c.g,c.b],i*3);g.setAttribute('color',new THREE.BufferAttribute(col,3));}
   duck=new THREE.InstancedMesh(g,stdMat({wetGloss:0},{roughness:0.35}),DW);duck.frustumCulled=false;duck.castShadow=true;duck.receiveShadow=true;
   const cs=scatter(10,8000,(x,z,h,d)=>d>0.8&&d<8);let k=0;
   while(k<DW){const c=cs[k%cs.length];const x=c.x+gauss()*9,z=c.z+gauss()*9;if(Math.abs(x)>TX-1||Math.abs(z)>TZ-1||WL0-hAt(x,z)<0.3)continue;
@@ -994,40 +994,46 @@ function fishMat(sp){
   return [m,d];
 }
 const SPECIES=[
-  {name:'宝莲灯',n:90,len:3.4,H:0.25,W:0.11,iriA:'#1a64ff',iriB:'#20f0c8',
+  {name:'宝莲灯',n:90,len:4.0,H:0.25,W:0.11,iriA:'#1a64ff',iriB:'#20f0c8',
     cfg:{vmin:1.2,cruise:5.5,vmax:24,R:7,sep:1.5,kc:0.9,ka:1.8,ks:10,kt:1.1,y0:0.15,y1:0.55,minDepth:12},
     col:(t,s,c)=>{if(t>0.9)return c.set(C('#c9c6b8'));if(s>0.5)return c.set(C('#5a5845'));if(s>-0.05)return c.set(C('#1d5fcf'));if(s<-0.7&&t>0.6)return c.set(C('#d6d2c6'));return c.set(C('#c8261a'));},
     iri:(t,s)=>s>-0.08&&s<0.5&&t>0.08&&t<0.92?1:0,finCol:(cv,s,c)=>c.set(C('#b9b2a2')).lerp(C('#d8d4cc'),cv),finIri:0,
     tail:{len:0.25,fork:0.45,span:0.2},dorsal:{t0:0.44,t1:0.58,h:0.15},anal:{t0:0.2,t1:0.42,h:0.09},eye:{r:0.04,iris:C('#9aa6b2')}},
-  {name:'三角灯',n:55,len:4.2,H:0.3,W:0.11,iriA:'#b060ff',iriB:'#ffb070',
+  {name:'三角灯',n:55,len:4.6,H:0.3,W:0.11,iriA:'#b060ff',iriB:'#ffb070',
     cfg:{vmin:1.5,cruise:6.5,vmax:26,R:8,sep:1.8,kc:0.8,ka:1.6,ks:9,kt:1.0,y0:0.45,y1:0.85,minDepth:14},
     col:(t,s,c)=>{const tri=t>0.1&&t<0.56&&Math.abs(s-0.05)<(t-0.1)/0.46*0.8;if(tri)return c.set(C('#18110f'));if(s>0.55)return c.set(C('#7a5a40'));if(s<-0.65)return c.set(C('#e8c0a8'));return c.set(C('#e0855a')).lerp(C('#f0a080'),Math.max(0,-s));},
     iri:(t,s)=>s>-0.4&&s<0.6?0.25:0,finCol:(cv,s,c)=>c.set(C('#e46a3a')).lerp(C('#f0b090'),cv*0.6),finIri:0,
     tail:{len:0.27,fork:0.5,span:0.24},dorsal:{t0:0.42,t1:0.56,h:0.18},anal:{t0:0.24,t1:0.4,h:0.12},eye:{r:0.042,iris:C('#c87a40')}},
-  {name:'花鼠',n:14,len:5.4,H:0.34,W:0.2,cory:true,pat:1,iriA:'#30a070',iriB:'#80c0a0',belly:0.7,
+  {name:'花鼠',n:14,len:6.0,H:0.34,W:0.2,cory:true,pat:1,iriA:'#30a070',iriB:'#80c0a0',belly:0.7,
     cfg:{vmin:0,cruise:2.2,vmax:16,R:9,sep:3,kc:0.35,ka:0.6,ks:6,kt:0.8,bottom:true,minDepth:4},
     col:(t,s,c)=>{if(s<-0.45)return c.set(C('#e2dccb'));return c.set(C('#8f8670')).lerp(C('#5e5746'),Math.max(0,s));},
     iri:(t,s)=>s>-0.3&&s<0.5?0.18:0,finCol:(cv,s,c)=>c.set(C('#b0a88e')),finIri:0,
     tail:{len:0.22,fork:0.35,span:0.22},dorsal:{t0:0.52,t1:0.66,h:0.22},anal:{t0:0.22,t1:0.34,h:0.08},eye:{r:0.045,iris:C('#c0b070')}},
 ];
-const floorAt=(x,z)=>gridAt(OCC,x,z);
+const floorAt=(x,z)=>hAt(x,z);   // 水底 = 真实地形（不含枯木）
+// 枯木 / 石头 → 3D 体素障碍（2 cm 网格），鱼绕行而不是被抬到木头上
+const VX=2,VNX=Math.ceil(2*TX/VX),VNZ=Math.ceil(2*TZ/VX),VNY=Math.ceil((WL0+6)/VX),VOX=new Uint8Array(VNX*VNY*VNZ);
+const voxI=(x,y,z)=>{const i=Math.floor((x+TX)/VX),j=Math.floor(y/VX),k=Math.floor((z+TZ)/VX);if(i<0||j<0||k<0||i>=VNX||j>=VNY||k>=VNZ)return -1;return (j*VNZ+k)*VNX+i;};
+for(const g of [barkGeo,driftGeo,rockGeo]){const p=g.attributes.position;for(let n=0;n<p.count;n++){const x=p.getX(n),y=p.getY(n),z=p.getZ(n);if(y>WL0+6)continue;
+  for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++)for(let c=-1;c<=1;c++){const id=voxI(x+a*VX,y+b*VX,z+c*VX);if(id>=0)VOX[id]=1;}}}
+const solid=(x,y,z)=>{const id=voxI(x,y,z);return id>=0&&VOX[id]===1;};
 const schools=SPECIES.map(sp=>{
   const geo=fishGeo(sp),[mat,dep]=fishMat(sp),n=sp.n;
   const m=new THREE.InstancedMesh(geo,mat,n);m.customDepthMaterial=dep;m.castShadow=true;m.receiveShadow=true;m.frustumCulled=false;
   const fa=new Float32Array(n*3),attr=new THREE.InstancedBufferAttribute(fa,3);attr.setUsage(THREE.DynamicDrawUsage);geo.setAttribute('aFish',attr);
   const F={sp,cfg:sp.cfg,m,attr,fa,n,p:new Float32Array(n*3),v:new Float32Array(n*3),f:new Float32Array(n*3),ph:new Float32Array(n),sc:new Float32Array(n),
     st:new Int8Array(n),stT:new Float32Array(n),tgt:new V3(),tt:0,startle:0,gulpT:rr(5,15)};
-  let cx=0,cz=0,cy=0;for(let k=0;k<4000;k++){cx=rr(-TX+20,TX-20);cz=rr(-TZ+15,TZ-15);if(WL0-floorAt(cx,cz)>(sp.cfg.bottom?8:22))break;}
+  let cx=0,cz=0,cy=0;for(let k=0;k<4000;k++){cx=rr(-TX+20,TX-20);cz=rr(-TZ+15,TZ-15);if(WL0-floorAt(cx,cz)>(sp.cfg.bottom?8:22)&&!solid(cx,sp.cfg.bottom?floorAt(cx,cz)+1:WL0-10,cz))break;}
   cy=sp.cfg.bottom?floorAt(cx,cz)+1:WL0-10;
-  for(let i=0;i<n;i++){F.p.set([cx+gauss()*6,cy+gauss()*2,cz+gauss()*6],i*3);const a=rand()*6.28;F.v.set([Math.cos(a)*3,0,Math.sin(a)*3],i*3);F.f.set([Math.cos(a),0,Math.sin(a)],i*3);
-    F.ph[i]=rand()*6.28;F.sc[i]=sp.len*rr(0.82,1.15);}
+  for(let i=0;i<n;i++){let x,y,z,t=0;do{x=cx+gauss()*6;z=cz+gauss()*6;y=clamp(cy+gauss()*2,floorAt(x,z)+0.8,WL0-1);}while((solid(x,y,z)||WL0-floorAt(x,z)<3)&&++t<50);F.p.set([x,y,z],i*3);const a=rand()*6.28;F.v.set([Math.cos(a)*3,0,Math.sin(a)*3],i*3);F.f.set([Math.cos(a),0,Math.sin(a)],i*3);
+    F.ph[i]=rand()*6.28;F.sc[i]=sp.len*rr(0.85,1.1);}
   scene.add(m);return F;
 });
 function pickTarget(F,lvl,night,rainy){
   const c=F.cfg;
   for(let k=0;k<60;k++){const x=rr(-TX+10,TX-10),z=rr(-TZ+10,TZ-10),fl=floorAt(x,z),dep=lvl-fl;if(dep<c.minDepth)continue;
     let y0=c.y0,y1=c.y1;if(night){y0*=0.3;y1*=0.35;}if(rainy){y0*=0.6;y1*=0.6;}
-    F.tgt.set(x,c.bottom?fl+0.9:fl+2+(dep-4)*rr(y0,y1),z);break;}
+    const ty=c.bottom?fl+0.9:fl+2+(dep-4)*rr(y0,y1);if(solid(x,ty,z))continue;F.tgt.set(x,ty,z);break;}
   F.tt=c.bottom?rr(10,25):rr(6,14);
 }
 let fishTimer=0;
@@ -1057,6 +1063,10 @@ function updateFish(dt,lvl){
       const fl=floorAt(px,pz),top=lvl-1.5;
       if(py>top&&F.st[i]!==1)ay-=(py-top)*kb*2;
       const minY=fl+(c.bottom?0.6:2.2);if(py<minY)ay+=(minY-py)*kb*2;
+      {const sp3=Math.hypot(vx,vy,vz)+1e-3;let gx=0,gy=0,gz=0,hit=false;
+        for(const L of[2.5,5]){if(solid(px+vx/sp3*L,py+vy/sp3*L,pz+vz/sp3*L)){hit=true;break;}}
+        if(hit||solid(px,py,pz)){for(const [dx,dy,dz] of [[2,0,0],[-2,0,0],[0,2,0],[0,-2,0],[0,0,2],[0,0,-2],[2,0,2],[-2,0,2],[2,0,-2],[-2,0,-2]])if(solid(px+dx,py+dy,pz+dz)){gx-=dx;gy-=dy;gz-=dz;}
+          const gl=Math.hypot(gx,gy,gz);if(gl>0){ax+=gx/gl*40;ay+=gy/gl*25;az+=gz/gl*40;}else{ax+=-vz/sp3*30;az+=vx/sp3*30;}}}
       {const sp=Math.hypot(vx,vz)+1e-3,lx=px+vx/sp*5,lz=pz+vz/sp*5;if(lvl-floorAt(lx,lz)<3.5){const gx=floorAt(px+1,pz)-floorAt(px-1,pz),gz=floorAt(px,pz+1)-floorAt(px,pz-1),gl=Math.hypot(gx,gz)+1e-3;ax-=gx/gl*25;az-=gz/gl*25;ay-=4;}}
       ay*=c.bottom?1:0.7;
       vx+=ax*dt;vy+=ay*dt;vz+=az*dt;
@@ -1064,8 +1074,8 @@ function updateFish(dt,lvl){
       const want=c.bottom&&F.st[i]===0?cruise*(0.4+0.6*(0.5+0.5*Math.sin(fishTimer*0.5+i*2.1))):cruise;
       const ns=clamp(spd+(want-spd)*Math.min(1,dt*1.2),c.vmin*act,vmax);vx*=ns/spd;vy*=ns/spd;vz*=ns/spd;spd=ns;
       let nx=px+vx*dt,ny=py+vy*dt,nz=pz+vz*dt;
-      if(lvl-floorAt(nx,nz)<1.5){nx=px;nz=pz;vx=-vx*0.5;vz=-vz*0.5;}
-      nx=clamp(nx,-TX+1.5,TX-1.5);nz=clamp(nz,-TZ+1.5,TZ-1.5);ny=clamp(ny,floorAt(nx,nz)+0.5,lvl-0.6);
+      if(lvl-floorAt(nx,nz)<1.5||(solid(nx,ny,nz)&&!solid(px,py,pz))){nx=px;ny=py;nz=pz;vx=-vx*0.5;vy=-vy*0.3;vz=-vz*0.5;}
+      nx=clamp(nx,-TX+1.5,TX-1.5);nz=clamp(nz,-TZ+1.5,TZ-1.5);ny=Math.min(Math.max(ny,floorAt(nx,nz)+0.5),lvl-0.6);   // 水面上限优先：鱼永远在水里
       P[o]=nx;P[o+1]=ny;P[o+2]=nz;Vv[o]=vx;Vv[o+1]=vy;Vv[o+2]=vz;
       // 朝向（平滑）、转弯弯曲、摆尾
       let fx=Fd[o],fy=Fd[o+1],fz=Fd[o+2];
@@ -1550,7 +1560,7 @@ camera.position.copy(fitPos(CAMS[0][0],CAMS[0][1]));
 applyQuality(quality);
 $('loading').style.opacity=0;setTimeout(()=>$('loading').remove(),700);
 frame();
-window.__viv={schools,schoolCenter,S,E,G,camera,controls,renderer,scene,applyQuality,snap:()=>{render(0.016);return canvas.toDataURL('image/png');}};
+window.__viv={updateFish,solid,floorAt,schools,schoolCenter,S,E,G,camera,controls,renderer,scene,applyQuality,snap:()=>{render(0.016);return canvas.toDataURL('image/png');}};
 </script>
 </body>
 </html>
